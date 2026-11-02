@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hocuspocus/provider": "4.7.1",
+    "@hocuspocus/provider": "4.8.0",
     "undici": "8.12.3",
     "ws": "8.22.0",
     "yjs": "13.6.33"
