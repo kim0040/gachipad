@@ -99,6 +99,27 @@ export interface SessionOptions {
 
 const sessions = new Set<DocSession>();
 
+/** Shared Web Lock held while this tab has an open document; other tabs read it (lib/app-update). */
+export const EDITING_LOCK = "gachipad-editing";
+let releaseEditingLock: (() => void) | null = null;
+
+/** Follows `sessions`. Closing the tab frees the lock too. No Web Locks (plain HTTP): nothing to do. */
+function syncEditingLock(): void {
+  if (sessions.size === 0) {
+    releaseEditingLock?.();
+    releaseEditingLock = null;
+  } else if (!releaseEditingLock && navigator.locks) {
+    const held = new Promise<void>((resolve) => {
+      releaseEditingLock = resolve;
+    });
+    navigator.locks.request(EDITING_LOCK, { mode: "shared" }, () => held).catch(() => undefined);
+  }
+}
+
+export function hasOpenSessions(): boolean {
+  return sessions.size > 0;
+}
+
 /** Document updates are sent immediately; wait for every open document's server acknowledgement.
  * Without an acknowledgement we keep the tab alive, even if IndexedDB happens to be available.
  */
@@ -250,6 +271,7 @@ export class DocSession {
     this.unsubscribePrefs = subscribePrefs(() => this.onPrefs());
     this.attachPersistence();
     sessions.add(this);
+    syncEditingLock();
     window.addEventListener("online", this.onlineListener);
     window.addEventListener("offline", this.onlineListener);
   }
@@ -739,6 +761,7 @@ export class DocSession {
     clearDiagnosticContext(this.diagnosticRef);
     this.epoch++;
     sessions.delete(this);
+    syncEditingLock();
     window.removeEventListener("online", this.onlineListener);
     window.removeEventListener("offline", this.onlineListener);
     if (this.docListener) this.doc.off("update", this.docListener);

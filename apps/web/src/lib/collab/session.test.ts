@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { ApiError } from "../api";
-import { DocSession, isOutage } from "./session";
+import { DocSession, EDITING_LOCK, hasOpenSessions, isOutage } from "./session";
 
 /** The provider callbacks these tests call. */
 interface ProviderConfig {
@@ -101,6 +101,57 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe("the editing lock other tabs read before applying an update", () => {
+  function fakeLocks() {
+    const held: Array<{ name: string; mode: string }> = [];
+    const request = vi.fn(
+      async (name: string, options: { mode: string }, callback: () => Promise<unknown>) => {
+        const lock = { name, mode: options.mode };
+        held.push(lock);
+        await callback();
+        held.splice(held.indexOf(lock), 1);
+      },
+    );
+    return { held, request };
+  }
+
+  it("is held shared from the first open document until the last one closes", async () => {
+    const locks = fakeLocks();
+    vi.stubGlobal("navigator", { locks });
+    expect(hasOpenSessions()).toBe(false);
+    const first = open();
+    const second = open();
+    expect(hasOpenSessions()).toBe(true);
+    expect(locks.request).toHaveBeenCalledTimes(1);
+    expect(locks.held).toMatchObject([{ name: EDITING_LOCK, mode: "shared" }]);
+
+    first.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(locks.held).toHaveLength(1);
+
+    second.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(locks.held).toHaveLength(0);
+    expect(hasOpenSessions()).toBe(false);
+
+    const third = open();
+    expect(locks.request).toHaveBeenCalledTimes(2);
+    expect(locks.held).toHaveLength(1);
+    third.destroy();
+  });
+
+  it("opens a document without Web Locks, and when the lock is refused", async () => {
+    vi.stubGlobal("navigator", {});
+    open().destroy();
+    const request = vi.fn(async () => Promise.reject(new Error("SecurityError")));
+    vi.stubGlobal("navigator", { locks: { request } });
+    const session = open();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(request).toHaveBeenCalledTimes(1);
+    session.destroy();
+  });
 });
 
 describe("join failures", () => {
