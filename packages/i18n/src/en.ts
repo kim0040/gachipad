@@ -630,6 +630,9 @@ export const en = {
   "toast.uploadFailed": "Couldn't add the files. Try again in a moment.",
   "toast.upload.noText": "No text files found",
   "toast.upload.noText.hint": "Drop code or text files, a folder or a .zip.",
+  "toast.upload.overLimit": "That's over the {size} MB upload limit",
+  "toast.create.timeout": "The new share is taking too long",
+  "toast.create.timeout.hint": "Check your connection and try again.",
   "toast.import.added": "Added {name}",
   "toast.import.addedMany.one": "Added {count} file",
   "toast.import.addedMany.other": "Added {count} files",
@@ -648,6 +651,7 @@ export const en = {
   "toast.import.openedDuplicateMany.other":
     "{count} files with the same content are already here, so nothing new was added",
   "toast.import.none": "No files were added",
+  "toast.import.stale": "The share reloaded while your files were being read. Add them again.",
   "toast.import.empty": "No files were found in what you dropped",
   "toast.import.reading.one": "Reading {count} file…",
   "toast.import.reading.other": "Reading {count} files…",
@@ -668,11 +672,16 @@ export const en = {
   "toast.import.reason.zipTooMany": "too many files in the archive",
   "toast.import.reason.zipTooBig": "too large once unpacked",
   "toast.import.reason.zipBad": "unreadable .zip",
+  "toast.import.reason.dropTooBig": "too much to read at once",
+  "toast.import.reason.notChecked": "Stopped after {max} items, so the rest was not checked",
   "toast.undoAction": "Undo",
 
   // ── Upload ──
   "upload.title": "Upload files or a folder",
+  "upload.titleFiles": "Upload files",
   "upload.dropHint": "Drop files, a folder or a .zip here",
+  "upload.pickHint": "Choose files or a .zip",
+  "upload.startAction": "Upload files",
   "upload.browseAction": "Choose files",
   "upload.folderAction": "Choose a folder",
   "upload.limit": "Up to {size} per upload",
@@ -1267,12 +1276,12 @@ export const en = {
   "tour.files.body":
     "Each tab is a file. Drag files, folders or a .zip from your computer anywhere onto the window and they are added right away.",
   "tour.files.touchBody":
-    "Each tab is a file. Use Upload files in the more menu to add files, folders or a .zip.",
+    "Each tab is a file. Use Upload files in the more menu to add files or a .zip.",
   "tour.files.limitedBody":
     "Each tab is a file. You cannot add files to this share. Select a tab to open another file.",
   "tour.dropTip.label": "Tip: adding files",
   "tour.dropTip.body": "Drag a file like main.py onto the window to add it right away.",
-  "tour.dropTip.touchBody": "Use the upload button to add files, folders or a .zip.",
+  "tour.dropTip.touchBody": "Use the upload button to add files or a .zip.",
   "tour.dropTip.openAction": "Open upload",
   "tour.dropTip.dismissAction": "Dismiss tip",
   "tour.language.title": "Language",

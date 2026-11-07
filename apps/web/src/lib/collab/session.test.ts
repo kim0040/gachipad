@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Y from "yjs";
 import { ApiError } from "../api";
 import { DocSession, isOutage } from "./session";
 
@@ -248,6 +249,59 @@ describe("permission messages", () => {
     expect(session.getState().readOnly).toBe(false);
     session.destroy();
   });
+  it("keeps only what this client changed when a share is too large, one copy per file", async () => {
+    const session = open();
+    const first = session.doc;
+    const remote = new Y.Doc();
+    remote.getText("file:theirs").insert(0, "someone else's text");
+    Y.applyUpdate(first, Y.encodeStateAsUpdate(remote), fakes.Provider.made[0]);
+    first.getText("file:mine").insert(0, "my refused file");
+    const tooLarge = (index: number) =>
+      fakes.Provider.made[index]?.config.onStateless({
+        payload: JSON.stringify({ type: "too_large", maxDocBytes: 10 }),
+      });
+    tooLarge(0);
+    await vi.waitFor(() => expect(fakes.Provider.made).toHaveLength(2));
+    expect(session.getState().tooLarge).toBe(10);
+    expect(session.getState().unsentText).toEqual([
+      { id: 0, fileId: "mine", path: "mine", text: "my refused file" },
+    ]);
+
+    // Refused again, as every keystroke is at the limit: the newer copy replaces the older one.
+    session.doc.getText("file:mine").insert(0, "typed more: ");
+    tooLarge(1);
+    await vi.waitFor(() => expect(fakes.Provider.made).toHaveLength(3));
+    expect(session.getState().unsentText.map((saved) => saved.text)).toEqual(["typed more: "]);
+    session.destroy();
+  });
+
+  it("does not keep text the server already confirmed when a later update is refused", async () => {
+    const session = open();
+    session.doc.getText("file:saved").insert(0, "confirmed");
+    fakes.Provider.made[0]?.config.onUnsyncedChanges({ number: 0 });
+    session.doc.getText("file:new").insert(0, "refused");
+    fakes.Provider.made[0]?.config.onStateless({
+      payload: JSON.stringify({ type: "too_large", maxDocBytes: 10 }),
+    });
+    await vi.waitFor(() => expect(fakes.Provider.made).toHaveLength(2));
+    expect(session.getState().unsentText.map((saved) => saved.fileId)).toEqual(["new"]);
+    session.destroy();
+  });
+
+  it("changes the document epoch as soon as a resync starts, before the document is replaced", async () => {
+    const session = open();
+    const doc = session.doc;
+    const epoch = session.docEpoch;
+    const resync = session.resync();
+    expect(session.docEpoch).not.toBe(epoch);
+    expect(session.doc).toBe(doc);
+    await resync;
+    expect(session.doc).not.toBe(doc);
+    const next = session.docEpoch;
+    session.destroy();
+    expect(session.docEpoch).not.toBe(next);
+  });
+
   it("updates capabilities live without discarding text edits", () => {
     const session = open();
     const previous = session.doc;

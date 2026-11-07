@@ -1,6 +1,6 @@
 import type { MessageKey, TFunction } from "@gachipad/i18n";
 import { MAX_FILES_PER_SHARE } from "@gachipad/shared";
-import type { Skip, SkipReason } from "./dropped-files";
+import { MAX_WALKED_ENTRIES, type Skip, type SkipReason } from "./dropped-files";
 import { type ImportResult, MAX_FILE_BYTES } from "./import-files";
 
 /** The toasts an import ends with, built from its result. No React, no side effects. */
@@ -28,6 +28,8 @@ const REASON_KEY: Record<SkipReason, MessageKey> = {
   zipTooMany: "toast.import.reason.zipTooMany",
   zipTooBig: "toast.import.reason.zipTooBig",
   zipBad: "toast.import.reason.zipBad",
+  dropTooBig: "toast.import.reason.dropTooBig",
+  notChecked: "toast.import.reason.notChecked",
 };
 
 const shorten = (name: string) =>
@@ -36,7 +38,7 @@ const shorten = (name: string) =>
 export function skipReasonText(t: TFunction, reason: SkipReason): string {
   return t(REASON_KEY[reason], {
     size: `${MAX_FILE_BYTES / (1024 * 1024)}MB`,
-    max: MAX_FILES_PER_SHARE,
+    max: reason === "notChecked" ? MAX_WALKED_ENTRIES : MAX_FILES_PER_SHARE,
   });
 }
 
@@ -52,7 +54,7 @@ export function skipDescription(t: TFunction, skipped: readonly Skip[]): string 
   const listed = named.reduce((sum, skip) => sum + countOf(skip), 0);
   const parts = named.map((skip) => `${shorten(skip.name)} (${skipReasonText(t, skip.reason)})`);
   if (total > listed) {
-    const unnamed = skipped.find((skip) => skip.name === "");
+    const unnamed = skipped.find((skip) => skip.name === "" && countOf(skip) > 0);
     parts.push(
       named.length === 0 && unnamed
         ? t("toast.import.skipTail", {
@@ -62,13 +64,19 @@ export function skipDescription(t: TFunction, skipped: readonly Skip[]): string 
         : t("toast.import.more", { count: total - listed }),
     );
   }
-  return parts.join(", ");
+  const listing = parts.join(", ");
+  return skipped.some((skip) => skip.reason === "notChecked")
+    ? [listing, skipReasonText(t, "notChecked")].filter(Boolean).join(". ")
+    : listing;
 }
 
 /** A warning toast for skips alone (a landing-page drop has no import result). */
 export function skipToast(t: TFunction, skipped: readonly Skip[]): SummaryToast | null {
   if (skipped.length === 0) return null;
   const total = skipped.reduce((sum, skip) => sum + countOf(skip), 0);
+  // Only "the rest was not checked": nothing that was looked at was left out.
+  if (total === 0)
+    return { title: skipReasonText(t, "notChecked"), tone: "warning", duration: 9000 };
   return {
     title: t("toast.import.skipped", { count: total }),
     description: skipDescription(t, skipped),

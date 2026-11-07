@@ -644,6 +644,9 @@ export const ko: KoDictionary = {
   "toast.uploadFailed": "올리지 못했어요. 잠시 뒤에 다시 시도해 주세요.",
   "toast.upload.noText": "텍스트 파일을 찾지 못했어요",
   "toast.upload.noText.hint": "코드나 텍스트 파일, 폴더, .zip을 끌어다 놓아 주세요.",
+  "toast.upload.overLimit": "업로드 제한 {size}MB를 넘어요",
+  "toast.create.timeout": "새 공유를 만드는 데 시간이 너무 오래 걸려요",
+  "toast.create.timeout.hint": "연결을 확인하고 다시 시도해 주세요.",
   "toast.import.added": "{name} 파일을 추가했어요",
   "toast.import.addedMany.other": "파일 {count}개를 추가했어요",
   "toast.import.renamed":
@@ -656,6 +659,7 @@ export const ko: KoDictionary = {
   "toast.import.openedDuplicateMany.other":
     "같은 내용의 파일 {count}개가 이미 있어서 새로 만들지 않았어요",
   "toast.import.none": "추가한 파일이 없어요",
+  "toast.import.stale": "파일을 읽는 동안 공유를 다시 불러왔어요. 다시 추가해 주세요.",
   "toast.import.empty": "끌어다 놓은 항목에서 파일을 찾지 못했어요",
   "toast.import.reading.other": "파일 {count}개를 읽는 중이에요…",
   "toast.import.skipped.other": "건너뛴 항목이 {count}개 있어요",
@@ -672,11 +676,16 @@ export const ko: KoDictionary = {
   "toast.import.reason.zipTooMany": "압축 파일 안의 파일이 너무 많아요",
   "toast.import.reason.zipTooBig": "압축을 풀면 너무 커요",
   "toast.import.reason.zipBad": "읽을 수 없는 .zip이에요",
+  "toast.import.reason.dropTooBig": "한 번에 읽기에는 너무 많아요",
+  "toast.import.reason.notChecked": "{max}개까지만 확인해서 나머지는 확인하지 못했어요",
   "toast.undoAction": "실행 취소",
 
   // ── Upload ──
   "upload.title": "파일이나 폴더 올리기",
+  "upload.titleFiles": "파일 올리기",
   "upload.dropHint": "파일, 폴더, .zip을 여기에 끌어다 놓으세요",
+  "upload.pickHint": "파일이나 .zip을 골라 주세요",
+  "upload.startAction": "파일 올리기",
   "upload.browseAction": "파일 선택",
   "upload.folderAction": "폴더 선택",
   "upload.limit": "한 번에 최대 {size}까지 올릴 수 있어요",
@@ -1259,12 +1268,12 @@ export const ko: KoDictionary = {
   "tour.files.body":
     "탭 하나가 파일 하나예요. 내 컴퓨터의 파일, 폴더, .zip을 화면 아무 곳에나 끌어다 놓으면 바로 추가돼요.",
   "tour.files.touchBody":
-    "탭 하나가 파일 하나예요. 더 보기 메뉴의 파일 올리기로 파일, 폴더, .zip을 추가할 수 있어요.",
+    "탭 하나가 파일 하나예요. 더 보기 메뉴의 파일 올리기로 파일이나 .zip을 추가할 수 있어요.",
   "tour.files.limitedBody":
     "탭 하나가 파일 하나예요. 이 공유에서는 파일을 추가할 수 없어요. 탭을 눌러 다른 파일을 볼 수 있어요.",
   "tour.dropTip.label": "파일 추가 팁",
   "tour.dropTip.body": "main.py 같은 파일을 화면으로 끌어다 놓으면 바로 추가돼요.",
-  "tour.dropTip.touchBody": "업로드 버튼으로 파일, 폴더, .zip을 추가할 수 있어요.",
+  "tour.dropTip.touchBody": "업로드 버튼으로 파일이나 .zip을 추가할 수 있어요.",
   "tour.dropTip.openAction": "업로드 열기",
   "tour.dropTip.dismissAction": "팁 닫기",
   "tour.language.title": "언어",

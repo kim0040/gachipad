@@ -2,7 +2,6 @@ import type { MessageKey } from "@gachipad/i18n";
 import { toast } from "@gachipad/ui";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useT } from "../../lib/i18n";
-import { modalIsOpen } from "../tour/modal-open";
 
 /**
  * Dropping files on the page.
@@ -14,22 +13,30 @@ import { modalIsOpen } from "../tour/modal-open";
  *
  * The listeners run in the capture phase, before any target below sees the event, so there is
  * exactly one importer per drop. Targets that take drops themselves (a person to send a file to)
- * carry `data-file-drop-target`; an open modal dialog owns the drag as well, and neither gets an
- * overlay or an import from the page.
+ * carry `data-file-drop-target`, and a modal dialog with drop handling of its own carries
+ * `data-file-drop-modal`; those two get no overlay and no import from the page. Every other dialog,
+ * sheet or the tour leaves the drop to the page, which takes it or says why it cannot.
  */
 
 export const FILE_DROP_TARGET_ATTR = "data-file-drop-target";
+const OPEN_DROP_MODAL = '[data-file-drop-modal][data-state="open"]';
 
-/** A drag that is still alive without events (Esc, the pointer left the window) ends after this. */
-const STALE_MS = 1500;
+/**
+ * A drag that is still alive without events (Esc, the pointer left the window) ends after this. A
+ * browser sends `dragover` about every 350 ms (HTML spec: 350 +/- 200) while the pointer holds
+ * still, but this has only been seen under automation; a late end is harmless, a flicker is not.
+ */
+const STALE_MS = 4000;
 
 export interface FileDropConfig {
   /** "add" puts the files into the open share, "create" starts a new share from them. */
   mode: "add" | "create";
   /** Why the files cannot be taken right now; the overlay says so and a drop shows a toast. */
   denied: MessageKey | null;
-  /** The drop is being handled (a new share is being created): shown, further drops ignored. */
+  /** A new share is being created: a drag says so, and a drop is ignored. */
   busy?: boolean;
+  /** Keep the overlay up with no drag at all: the busy state is the result of a drop. */
+  showBusy?: boolean;
   /** Called inside the drop event: read the `DataTransfer` before the first await. */
   onDrop: (transfer: DataTransfer) => void;
 }
@@ -41,7 +48,10 @@ export interface FileDropView {
 }
 
 let page: { current: FileDropConfig } | null = null;
+/** Files are being dragged somewhere inside the window, over a target or not. */
 let dragging = false;
+/** The pointer is over something that takes the drop itself, so the page stays out of the way. */
+let suppressed = false;
 let depth = 0;
 let staleTimer = 0;
 const listeners = new Set<() => void>();
@@ -49,7 +59,7 @@ let snapshot: FileDropView | null = null;
 
 function publish() {
   const config = page?.current;
-  const visible = Boolean(config && (config.busy || dragging));
+  const visible = Boolean(config && (config.showBusy || (dragging && !suppressed)));
   const next: FileDropView | null =
     config && visible
       ? { mode: config.mode, denied: config.denied, busy: Boolean(config.busy) }
@@ -66,12 +76,20 @@ function publish() {
   for (const listener of listeners) listener();
 }
 
-function setDragging(on: boolean) {
+function endDrag() {
   window.clearTimeout(staleTimer);
-  if (on) staleTimer = window.setTimeout(() => setDragging(false), STALE_MS);
-  else depth = 0;
-  if (dragging === on) return;
-  dragging = on;
+  depth = 0;
+  dragging = false;
+  suppressed = false;
+  publish();
+}
+
+/** An event of a drag inside the window: it is alive, and this is what the pointer is over. */
+function continueDrag(overTarget: boolean) {
+  window.clearTimeout(staleTimer);
+  staleTimer = window.setTimeout(endDrag, STALE_MS);
+  dragging = true;
+  suppressed = overTarget;
   publish();
 }
 
@@ -91,8 +109,8 @@ export type DropDecision = "ignore" | "take" | "denied" | "busy";
 
 /**
  * What the page does with a drag of files. It leaves the drag alone when no page wants files, when
- * a modal dialog is open (its own drop zone or person list takes it) and over an element that takes
- * drops itself; otherwise the page is the only importer.
+ * a dialog with drop handling of its own is open (its drop zone or person list takes it) and over
+ * an element that takes drops itself; otherwise the page is the only importer.
  */
 export function decideDrop(state: {
   hasPage: boolean;
@@ -110,7 +128,7 @@ function onCapture(event: DragEvent) {
   if (!isExternalFileDrag(event)) return;
   const config = page?.current;
   if (event.type === "dragleave") {
-    if (--depth <= 0) setDragging(false);
+    if (--depth <= 0) endDrag();
     else if (
       !event.relatedTarget &&
       (event.clientX <= 0 ||
@@ -118,19 +136,22 @@ function onCapture(event: DragEvent) {
         event.clientX >= window.innerWidth ||
         event.clientY >= window.innerHeight)
     )
-      setDragging(false);
+      endDrag();
     return;
   }
+  // Every element entered counts, target or not: entering the next one comes before leaving the
+  // last, so the count stays above zero for as long as the pointer is in the window.
   if (event.type === "dragenter") depth++;
+  else if (event.type === "dragover" && depth < 1) depth = 1;
   const decision = decideDrop({
     hasPage: Boolean(config),
-    modalOpen: modalIsOpen(),
+    modalOpen: document.querySelector(OPEN_DROP_MODAL) !== null,
     inTarget: insideTarget(event),
     busy: Boolean(config?.busy),
     denied: Boolean(config?.denied),
   });
   if (event.type === "drop") {
-    setDragging(false);
+    endDrag();
     if (decision === "ignore" || !config) return;
     event.preventDefault();
     if (decision === "denied" && config.denied) deniedHandler?.(config.denied);
@@ -138,13 +159,10 @@ function onCapture(event: DragEvent) {
     return;
   }
   // dragenter / dragover
-  if (decision === "ignore") {
-    setDragging(false);
-    return;
-  }
+  continueDrag(decision === "ignore");
+  if (decision === "ignore") return;
   event.preventDefault();
   if (event.dataTransfer) event.dataTransfer.dropEffect = decision === "take" ? "copy" : "none";
-  setDragging(true);
 }
 
 let deniedHandler: ((reason: MessageKey) => void) | null = null;
@@ -158,11 +176,7 @@ function onGuard(event: DragEvent) {
 }
 
 function onKey(event: KeyboardEvent) {
-  if (event.key === "Escape" && dragging) setDragging(false);
-}
-
-function onBlur() {
-  setDragging(false);
+  if (event.key === "Escape" && dragging) endDrag();
 }
 
 const TYPES = ["dragenter", "dragover", "dragleave", "drop"] as const;
@@ -175,15 +189,15 @@ export function useFileDropGuard() {
       window.addEventListener(type, onGuard);
     }
     window.addEventListener("keydown", onKey, true);
-    window.addEventListener("blur", onBlur);
+    window.addEventListener("blur", endDrag);
     return () => {
       for (const type of TYPES) window.removeEventListener(type, onCapture, true);
       for (const type of ["dragenter", "dragover", "drop"] as const) {
         window.removeEventListener(type, onGuard);
       }
       window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("blur", onBlur);
-      setDragging(false);
+      window.removeEventListener("blur", endDrag);
+      endDrag();
     };
   }, []);
 }

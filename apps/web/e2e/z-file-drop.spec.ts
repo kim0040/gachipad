@@ -1,4 +1,5 @@
-import { expect, type JSHandle, type Locator, type Page, test } from "@playwright/test";
+import { expect, type JSHandle, type Locator, type Page, type Route, test } from "@playwright/test";
+import { BASE_URL } from "./env";
 import {
   closeAll,
   closeDialog,
@@ -286,7 +287,7 @@ test("the overlay shows for files only, and goes away when the drag does", async
     await stopDrag(page);
     await editor.dispatchEvent("dragenter", { dataTransfer: files });
     await expect(overlay(page)).toBeVisible();
-    await expect(overlay(page)).toHaveCount(0, { timeout: 5000 });
+    await expect(overlay(page)).toHaveCount(0, { timeout: 8000 });
   } finally {
     await closeAll(owner);
   }
@@ -595,6 +596,395 @@ test("a drop on the landing page that cannot become a share says exactly why", a
     await folder.dispose();
   } finally {
     await closeAll(visitor);
+  }
+});
+
+test("crossing a person keeps the drag alive: the overlay steps aside and comes back, with no reset", async ({
+  browser,
+}) => {
+  const owner = await newUser(browser, "Sender");
+  const receiver = await newUser(browser, "Receiver");
+  try {
+    await createShare(owner.page);
+    await joinByLink(receiver, shareIdOf(owner.page));
+    await waitForEditor(receiver.page);
+    const page = owner.page;
+    const person = page.getByTestId("people").locator("button[data-file-drop-target]");
+    await expect(person).toBeVisible({ timeout: 20_000 });
+    const editor = targets.editor(page);
+    const files = await transferOf(page, [{ name: "a.txt", content: "a" }]);
+    const event = (target: Locator, type: string) =>
+      target.dispatchEvent(type, { dataTransfer: files });
+
+    await event(editor, "dragenter");
+    await event(editor, "dragover");
+    await expect(overlay(page)).toBeVisible();
+
+    // Into the person: entering comes before leaving, as in a browser.
+    await event(person, "dragenter");
+    await event(editor, "dragleave");
+    await event(person, "dragover");
+    await expect(overlay(page)).toHaveCount(0);
+
+    // And back out: the count of what the pointer is inside has to be right all along.
+    await event(editor, "dragenter");
+    await event(person, "dragleave");
+    await event(editor, "dragover");
+    await expect(overlay(page)).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(overlay(page)).toBeVisible();
+
+    // Only leaving the last element ends the drag.
+    await event(editor, "dragleave");
+    await expect(overlay(page)).toHaveCount(0);
+    await files.dispose();
+  } finally {
+    await closeAll(owner, receiver);
+  }
+});
+
+for (const [label, viewport] of [
+  ["desktop", { width: 1280, height: 800 }],
+  ["320", { width: 320, height: 640 }],
+] as const) {
+  test(`the overlay leaves the top bar uncovered on a share, ${label}`, async ({ browser }) => {
+    const owner = await newUser(browser, "Owner", { viewport });
+    try {
+      await createShare(owner.page);
+      const page = owner.page;
+      const transfer = await transferOf(page, [{ name: "a.txt", content: "a" }]);
+      await dragOver(page, targets.editor(page), transfer);
+      await expect(overlay(page)).toBeVisible();
+      const cover = await overlay(page).boundingBox();
+      const bar = await page.locator("header").first().boundingBox();
+      if (!cover || !bar) throw new Error("no boxes");
+      expect(cover.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+      expect(cover.y + cover.height).toBe(viewport.height);
+      await stopDrag(page);
+      await transfer.dispose();
+    } finally {
+      await closeAll(owner);
+    }
+  });
+}
+
+test("the overlay's words reach a live region that was already there", async ({ browser }) => {
+  const owner = await newUser(browser, "Owner");
+  try {
+    await createShare(owner.page);
+    const page = owner.page;
+    const status = page.getByTestId("file-drop-status");
+    await expect(status).toHaveAttribute("aria-live", "polite");
+    await expect(status).toHaveText("");
+    await status.evaluate((el) => {
+      (el as HTMLElement & { same?: boolean }).same = true;
+    });
+    const transfer = await transferOf(page, [{ name: "a.txt", content: "a" }]);
+    await dragOver(page, targets.editor(page), transfer);
+    await expect(status).toContainText("Drop to add to this share");
+    // The same node: a region that is replaced with its text in it is not announced.
+    expect(await status.evaluate((el) => (el as HTMLElement & { same?: boolean }).same)).toBe(true);
+    await stopDrag(page);
+    await page.keyboard.press("Escape");
+    await expect(status).toHaveText("");
+    await transfer.dispose();
+  } finally {
+    await closeAll(owner);
+  }
+});
+
+test("a sheet open on the page does not swallow a drop", async ({ browser }) => {
+  const owner = await newUser(browser, "Owner");
+  try {
+    await createShare(owner.page);
+    const page = owner.page;
+    await page.getByTestId("settings-button").click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+    const transfer = await transferOf(page, [{ name: "while-open.py", content: "print(1)\n" }]);
+    await dragOver(page, sheet, transfer);
+    await expect(overlay(page)).toBeVisible();
+    await drop(page, sheet, transfer);
+    await expect(toastText(page, "Added while-open.py")).toBeVisible();
+    await expect(page.getByTestId("tab-while-open.py")).toHaveCount(1);
+    await transfer.dispose();
+  } finally {
+    await closeAll(owner);
+  }
+});
+
+test("a dialog with its own drop zone keeps the drag to itself", async ({ browser }) => {
+  const owner = await newUser(browser, "Owner");
+  try {
+    await createShare(owner.page);
+    const page = owner.page;
+    await page.getByTestId("upload-files").click();
+    const zone = page.getByTestId("upload-zone");
+    await expect(zone).toBeVisible();
+    const transfer = await transferOf(page, [{ name: "in-zone.py", content: "print(1)\n" }]);
+    await zone.dispatchEvent("dragenter", { dataTransfer: transfer });
+    await zone.dispatchEvent("dragover", { dataTransfer: transfer });
+    await expect(overlay(page)).toHaveCount(0);
+    await zone.dispatchEvent("drop", { dataTransfer: transfer });
+    await expect(toastText(page, "Added in-zone.py")).toBeVisible();
+    await expect(page.getByTestId("tab-in-zone.py")).toHaveCount(1);
+    await transfer.dispose();
+  } finally {
+    await closeAll(owner);
+  }
+});
+
+test("an import shows the new file: it leaves history and closes the narrow file sheet", async ({
+  browser,
+}) => {
+  const wide = await newUser(browser, "Wide");
+  const narrow = await newUser(browser, "Narrow", { viewport: { width: 320, height: 640 } });
+  try {
+    await createShare(wide.page);
+    await wide.page.getByTestId("history-button").click();
+    await expect(wide.page.getByTestId("history-view")).toBeVisible();
+    await dropFiles(wide.page, wide.page.locator("body"), [
+      { name: "from-history.py", content: "print(1)\n" },
+    ]);
+    await expect(wide.page.getByTestId("history-view")).toBeHidden();
+    await expect.poll(() => editorText(wide.page)).toBe("print(1)");
+
+    await createShare(narrow.page);
+    await narrow.page.getByTestId("files-toggle").click();
+    const sheet = narrow.page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+    await dropFiles(narrow.page, sheet, [{ name: "from-sheet.py", content: "print(2)\n" }]);
+    await expect(sheet).toBeHidden();
+    await expect.poll(() => editorText(narrow.page)).toBe("print(2)");
+  } finally {
+    await closeAll(wide, narrow);
+  }
+});
+
+test("a file pasted with focus outside the editor is added; a field keeps its own paste", async ({
+  browser,
+}) => {
+  const owner = await newUser(browser, "Owner");
+  try {
+    await createShare(owner.page);
+    const page = owner.page;
+    const paste = (selector: string, name: string, text: string, html?: string) =>
+      page.evaluate(
+        ([sel, fileName, plain, markup]) => {
+          const data = new DataTransfer();
+          data.items.add(new File(["pasted\n"], fileName as string, { type: "text/plain" }));
+          data.setData("text/plain", plain as string);
+          if (markup) data.setData("text/html", markup);
+          document
+            .querySelector(sel as string)
+            ?.dispatchEvent(
+              new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
+            );
+        },
+        [selector, name, text, html] as const,
+      );
+    await paste("body", "outside.py", "outside.py");
+    await expect(page.getByTestId("tab-outside.py")).toBeVisible();
+
+    // What a Linux file manager puts next to the file.
+    await paste("body", "linux.py", "file:///home/student/linux.py");
+    await expect(page.getByTestId("tab-linux.py")).toBeVisible();
+
+    // A copy from a page or a document, with an image of it attached, is not a file from disk.
+    await paste("body", "image.png", "image.png", "<b>words</b>");
+    await page.waitForTimeout(300);
+    await expect(page.getByTestId("tab-image.png")).toHaveCount(0);
+
+    // In a field the paste is the field's.
+    await page.evaluate(() => {
+      const input = document.createElement("input");
+      input.id = "plain-field";
+      document.body.append(input);
+    });
+    await paste("#plain-field", "field.py", "field.py");
+    await page.waitForTimeout(300);
+    await expect(page.getByTestId("tab-field.py")).toHaveCount(0);
+  } finally {
+    await closeAll(owner);
+  }
+});
+
+test("the landing page reads files like the editor does: decoded, normalised, with the same summary", async ({
+  browser,
+}) => {
+  const visitor = await newUser(browser, "Visitor");
+  try {
+    const page = visitor.page;
+    await page.goto("/");
+    await expect(page.getByTestId("start-panel")).toBeVisible();
+    await dropFiles(page, page.locator("body"), [
+      // "hi", CRLF, in UTF-16 with a byte order mark.
+      { name: "wide.py", content: [0xff, 0xfe, 0x68, 0, 0x69, 0, 0x0d, 0, 0x0a, 0] },
+      // Two Korean syllables in CP949.
+      { name: "old.c", content: [0xc7, 0xd1, 0xb1, 0xdb] },
+      { name: "logo.png", content: [0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 1], type: "image/png" },
+    ]);
+    await page.waitForURL((url) => url.pathname !== "/");
+    await waitForEditor(page);
+    await page.getByTestId("tab-wide.py").click();
+    await expect.poll(() => editorText(page)).toBe("hi");
+    await page.getByTestId("tab-old.c").click();
+    await expect.poll(() => editorText(page)).toBe("한글");
+    await expect(tabs(page)).toHaveCount(2);
+    await expect(toastText(page, "1 item was skipped")).toBeVisible();
+    await expect(toastText(page, "logo.png (not a text file)")).toBeVisible();
+  } finally {
+    await closeAll(visitor);
+  }
+});
+
+test("one new share at a time: a drop waits out New share, and New share waits out a drop", async ({
+  browser,
+}) => {
+  const visitor = await newUser(browser, "Visitor");
+  try {
+    const page = visitor.page;
+    await page.goto("/");
+    await expect(page.getByTestId("start-panel")).toBeVisible();
+    const creates: string[] = [];
+    const hold = { release: () => {} };
+    const held = new Promise<void>((resolve) => {
+      hold.release = resolve;
+    });
+    const count = async (route: Route) => {
+      creates.push(route.request().url());
+      await held;
+      await route.continue();
+    };
+    await page.route("**/api/shares", (route) =>
+      route.request().method() === "POST" ? count(route) : route.continue(),
+    );
+    await page.route("**/api/uploads*", count);
+
+    await page.getByTestId("new-share").click();
+    await expect.poll(() => creates.length).toBe(1);
+    await expect(page.getByTestId("new-from-template")).toBeDisabled();
+    await dropFiles(page, page.locator("body"), [{ name: "late.py", content: "print(1)\n" }]);
+    await page.waitForTimeout(300);
+    expect(creates).toHaveLength(1);
+    hold.release();
+    await page.waitForURL((url) => url.pathname !== "/");
+    await waitForEditor(page);
+    await expect(page.getByTestId("tab-late.py")).toHaveCount(0);
+  } finally {
+    await closeAll(visitor);
+  }
+});
+
+test("a drop in flight leaves New share waiting, and keeps saying it is working", async ({
+  browser,
+}) => {
+  const visitor = await newUser(browser, "Visitor");
+  try {
+    const page = visitor.page;
+    await page.goto("/");
+    await expect(page.getByTestId("start-panel")).toBeVisible();
+    let shares = 0;
+    let uploads = 0;
+    const hold = { release: () => {} };
+    const held = new Promise<void>((resolve) => {
+      hold.release = resolve;
+    });
+    await page.route("**/api/shares", (route) => {
+      if (route.request().method() === "POST") shares++;
+      return route.continue();
+    });
+    await page.route("**/api/uploads*", async (route) => {
+      uploads++;
+      await held;
+      await route.continue();
+    });
+    await dropFiles(page, page.locator("body"), [{ name: "first.py", content: "print(1)\n" }]);
+    await expect.poll(() => uploads).toBe(1);
+    await expect(overlay(page)).toHaveAttribute("data-mode", "busy");
+    // The overlay takes no pointer, so this is the button itself saying no.
+    await expect(page.getByTestId("new-share")).toBeDisabled();
+    await page.evaluate(() =>
+      document.querySelector<HTMLButtonElement>('[data-testid="new-share"]')?.click(),
+    );
+    await dropFiles(page, page.locator("body"), [{ name: "second.py", content: "print(2)\n" }]);
+    await page.waitForTimeout(300);
+    expect({ shares, uploads }).toEqual({ shares: 0, uploads: 1 });
+    hold.release();
+    await page.waitForURL((url) => url.pathname !== "/");
+    await waitForEditor(page);
+    await expect(page.getByTestId("tab-first.py")).toBeVisible();
+    await expect(page.getByTestId("tab-second.py")).toHaveCount(0);
+  } finally {
+    await closeAll(visitor);
+  }
+});
+
+test("a narrow landing page has a real upload button, into the same path as a drop", async ({
+  browser,
+}) => {
+  const visitor = await newUser(browser, "Narrow", { viewport: { width: 320, height: 640 } });
+  try {
+    const page = visitor.page;
+    await page.goto("/");
+    const button = page.getByTestId("start-upload");
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= 320).toBe(true);
+    await page.getByTestId("start-upload-input").setInputFiles([
+      { name: "picked.py", mimeType: "text/plain", buffer: Buffer.from("print('a')\r\n") },
+      { name: "logo.png", mimeType: "image/png", buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0]) },
+    ]);
+    await page.waitForURL((url) => url.pathname !== "/");
+    await waitForEditor(page);
+    await expect.poll(() => editorText(page)).toBe("print('a')");
+    await expect(toastText(page, "logo.png (not a text file)")).toBeVisible();
+  } finally {
+    await closeAll(visitor);
+  }
+});
+
+test("a wide landing page keeps the drop hint, with no upload button in the way", async ({
+  browser,
+}) => {
+  const visitor = await newUser(browser, "Wide", { viewport: { width: 1280, height: 800 } });
+  try {
+    await visitor.page.goto("/");
+    await expect(visitor.page.getByTestId("start-panel")).toContainText(
+      "Drop files, a folder or a .zip here",
+    );
+    await expect(visitor.page.getByTestId("start-upload")).toHaveCount(0);
+  } finally {
+    await closeAll(visitor);
+  }
+});
+
+test("a touch device gets the button, no folder picker, and wording that does not offer one", async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "only Chromium emulates a touch-only device here");
+  const context = await browser.newContext({
+    baseURL: BASE_URL,
+    locale: "en-US",
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 1024, height: 768 },
+    extraHTTPHeaders: { "X-Gachipad": "1" },
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("/");
+    await expect(page.getByTestId("start-upload")).toBeVisible();
+    await page.getByTestId("new-share").click();
+    await waitForEditor(page);
+    await page.getByTestId("upload-files").click();
+    const dialog = page.getByRole("dialog", { name: "Upload files", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Choose files or a .zip");
+    await expect(dialog.getByRole("button", { name: "Choose folder" })).toHaveCount(0);
+  } finally {
+    await context.close();
   }
 });
 

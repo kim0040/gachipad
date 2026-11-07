@@ -451,6 +451,7 @@ test("an idle client sends no cursor when someone else types", async ({ browser 
 
 test("a crowded file calms down: near flags only, the host pinned, hysteresis on the way out", async ({
   browser,
+  browserName,
 }) => {
   test.setTimeout(240_000);
   const [host, observer, near, far, fifth, sixth] = (await room(browser, [
@@ -488,9 +489,12 @@ test("a crowded file calms down: near flags only, the host pinned, hysteresis on
     // Bars are dimmer, except under a request for more contrast.
     const bar = caretOf(page, far.name).locator(".cm-remote-caret-bar");
     await expect(bar).toHaveCSS("opacity", "0.6");
-    await page.emulateMedia({ contrast: "more" });
-    await expect(bar).toHaveCSS("opacity", "1");
-    await page.emulateMedia({ contrast: "no-preference" });
+    // Playwright has no prefers-contrast emulation in Firefox.
+    if (browserName !== "firefox") {
+      await page.emulateMedia({ contrast: "more" });
+      await expect(bar).toHaveCSS("opacity", "1");
+      await page.emulateMedia({ contrast: "no-preference" });
+    }
 
     // Selections are a light tint.
     await far.page.keyboard.press("Shift+ArrowLeft");
@@ -673,6 +677,167 @@ test("each cursor setting applies live, and hovering a caret shows the name in a
     ).toBe("auto");
   } finally {
     await closeAll(observer, peer);
+  }
+});
+
+test("a name opened by hover stays while the pointer is on it, and Escape closes it from anywhere", async ({
+  browser,
+}) => {
+  const [observer, peer] = (await room(browser, ["Watching", "Peer"])) as [User, User];
+  try {
+    const page = observer.page;
+    await goToLine(peer, 6);
+    await chooseCursors(page, "Cursors only");
+    await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "0");
+    const hover = async () => {
+      const box = await caretOf(page, peer.name).locator(".cm-remote-caret-bar").boundingBox();
+      if (!box) throw new Error("no caret box");
+      await page.mouse.move(box.x + 2, box.y + box.height / 2);
+      await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
+    };
+    await hover();
+
+    // Onto the name, past the reach of the caret: it stays, and still takes no pointer events.
+    const flag = await flagOf(page, peer.name).boundingBox();
+    if (!flag) throw new Error("no flag box");
+    await page.mouse.move(flag.x + flag.width - 2, flag.y + flag.height / 2, { steps: 4 });
+    await page.waitForTimeout(300);
+    await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
+    await expect(page.locator(".cm-remote-carets")).toHaveCSS("pointer-events", "none");
+    // Off it: gone.
+    await page.mouse.move(flag.x + flag.width + 60, flag.y - 60, { steps: 2 });
+    await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "0");
+
+    // Escape with focus outside the editor, and the key is still there for others.
+    await hover();
+    await page.getByTestId("settings-button").focus();
+    await page.evaluate(() => {
+      const w = window as unknown as { __escapeSeen?: boolean };
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") w.__escapeSeen = !event.defaultPrevented;
+      });
+    });
+    await page.keyboard.press("Escape");
+    await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "0");
+    expect(
+      await page.evaluate(() => (window as unknown as { __escapeSeen?: boolean }).__escapeSeen),
+    ).toBe(true);
+  } finally {
+    await closeAll(observer, peer);
+  }
+});
+
+test("switching to cursors only ends a name that is still showing, at once", async ({
+  browser,
+}) => {
+  const [observer, peer] = (await room(browser, ["Watching", "Peer"])) as [User, User];
+  try {
+    const page = observer.page;
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await goToLine(peer, 6);
+    await expect(caretOf(page, peer.name)).toBeVisible();
+    await expectFlagHidden(page, peer.name);
+
+    // The option is one click away while the peer starts a flash of three seconds.
+    const from = ["Automatic", "Names when moving"];
+    for (const [index, mode] of from.entries()) {
+      if (index > 0) await chooseCursors(page, mode);
+      await page.getByTestId("settings-button").click();
+      await page.getByTestId("select-remote-cursors").getByRole("combobox").click();
+      await peer.page.keyboard.type("x");
+      await expect(caretOf(page, peer.name)).toHaveAttribute("data-flag", /^[ab]$/);
+      await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
+      await page.getByRole("option", { name: "Cursors only", exact: true }).click();
+      await expect(caretOf(page, peer.name), mode).not.toHaveAttribute("data-flag", /./, {
+        timeout: 1000,
+      });
+      await expect(flagOf(page, peer.name), mode).toHaveCSS("opacity", "0", { timeout: 1000 });
+      await expect(async () => {
+        await page.keyboard.press("Escape");
+        await expect(page.getByTestId("select-remote-cursors")).toBeHidden({ timeout: 300 });
+      }).toPass();
+    }
+  } finally {
+    await closeAll(observer, peer);
+  }
+});
+
+test("a flag near the top of what is visible hangs below, wherever the document is scrolled", async ({
+  browser,
+}) => {
+  const [observer, peer] = (await room(browser, ["Watching", "Peer"], 120)) as [User, User];
+  try {
+    const page = observer.page;
+    await goToLine(peer, 20);
+    const caret = caretOf(page, peer.name);
+    await expect(caret).toBeVisible();
+    await expect(caret).not.toHaveClass(/is-top/);
+    const scrollCaretTo = (offset: number) =>
+      caret.evaluate((el, gap) => {
+        const scroller = document.querySelector(".cm-scroller") as HTMLElement;
+        scroller.scrollTop +=
+          el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - gap;
+      }, offset);
+    // At the very top of the visible part, far from the top of the document.
+    await scrollCaretTo(0);
+    await expect(caret).toHaveClass(/is-top/);
+    const flag = await flagOf(page, peer.name).boundingBox();
+    const scroller = await page.locator(".cm-scroller").boundingBox();
+    expect(flag && scroller && flag.y >= scroller.y).toBe(true);
+    // A little further down there is room above it again.
+    await scrollCaretTo(200);
+    await expect(caret).not.toHaveClass(/is-top/);
+  } finally {
+    await closeAll(observer, peer);
+  }
+});
+
+test("undoing counts as activity, also the undo of a file dropped into the empty file", async ({
+  browser,
+}) => {
+  const actor = await newUser(browser, "Actor");
+  const observer = await newUser(browser, "Watching");
+  try {
+    const id = await createShare(actor.page);
+    await actor.page.getByTestId("device-choice-skip").click();
+    await joinByLink(observer, id);
+    await waitForEditor(observer.page);
+    await observer.page.getByTestId("device-choice-skip").click();
+    const page = observer.page;
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+
+    // Text put straight into the document before any selection was recorded for it.
+    await actor.page.evaluate(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(["dropped\n"], "first.py", { type: "text/plain" }));
+      const target = document.querySelector(".cm-content") as Element;
+      for (const type of ["dragenter", "dragover", "drop"]) {
+        target.dispatchEvent(
+          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }),
+        );
+      }
+    });
+    await expect.poll(() => editorText(page)).toBe("dropped");
+    await actor.page.locator(".cm-content").click();
+    await expect(caretOf(page, actor.name)).toBeVisible();
+    await expectFlagHidden(page, actor.name);
+
+    await watchCarets(page);
+    await actor.page.keyboard.press("Control+z");
+    await expect.poll(() => editorText(page)).toBe("");
+    await expect
+      .poll(async () => (await readProbe(page)).flashes[actor.name] ?? 0)
+      .toBeGreaterThan(0);
+    await expectFlagHidden(page, actor.name);
+
+    await resetProbe(page);
+    await actor.page.keyboard.press("Control+Shift+z");
+    await expect.poll(() => editorText(page)).toBe("dropped");
+    await expect
+      .poll(async () => (await readProbe(page)).flashes[actor.name] ?? 0)
+      .toBeGreaterThan(0);
+  } finally {
+    await closeAll(actor, observer);
   }
 });
 

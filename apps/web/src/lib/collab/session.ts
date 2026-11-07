@@ -202,9 +202,14 @@ export class DocSession {
    * zero while any sync is under way, edits or not.
    */
   private editsUnconfirmed = false;
+  /** Files whose text this client changed since the server last confirmed everything. */
+  private readonly unconfirmedText = new Set<string>();
+  private unsentIds = 0;
   private state: SessionState;
   private readonly options: SessionOptions;
-  private docListener: ((update: Uint8Array, origin: unknown) => void) | null = null;
+  private docListener:
+    | ((update: Uint8Array, origin: unknown, doc: Y.Doc, transaction: Y.Transaction) => void)
+    | null = null;
   private onlineListener = () => this.refreshStatus();
   private pendingAwareness: Record<string, unknown> = {};
   private awarenessTimer: ReturnType<typeof setTimeout> | null = null;
@@ -247,6 +252,14 @@ export class DocSession {
     sessions.add(this);
     window.addEventListener("online", this.onlineListener);
     window.addEventListener("offline", this.onlineListener);
+  }
+
+  /**
+   * Changes the moment a resync, a leave or a destroy starts, before the document itself is
+   * replaced: work begun on `doc` under one epoch must not be applied under another.
+   */
+  get docEpoch(): number {
+    return this.epoch;
   }
 
   get awareness(): Awareness {
@@ -321,7 +334,10 @@ export class DocSession {
         }
       },
       onUnsyncedChanges: ({ number }) => {
-        if (number === 0 && provider === this.provider) this.editsUnconfirmed = false;
+        if (number === 0 && provider === this.provider) {
+          this.editsUnconfirmed = false;
+          this.unconfirmedText.clear();
+        }
         this.patch({ unsynced: number });
       },
       onClose: ({ event }) => {
@@ -365,10 +381,17 @@ export class DocSession {
 
   private watchLocalEdits(doc: Y.Doc) {
     if (this.docListener) return;
-    this.docListener = (_update, origin) => {
+    this.docListener = (_update, origin, _doc, transaction) => {
       if (origin === this.provider || origin instanceof IndexeddbPersistence) return;
       this.lastLocalEditAt = Date.now();
       this.editsUnconfirmed = true;
+      for (const type of transaction.changed.keys()) {
+        if (type._item !== null) continue;
+        const root = Y.findRootTypeKey(type);
+        if (root.startsWith(YDOC.fileText(""))) {
+          this.unconfirmedText.add(root.slice(YDOC.fileText("").length));
+        }
+      }
       if (this.state.status !== "connected") this.editedWhileAway = true;
     };
     doc.on("update", this.docListener);
@@ -545,7 +568,8 @@ export class DocSession {
     }
     if (message.type === "too_large") {
       this.patch({ tooLarge: message.maxDocBytes, readOnly: this.state.readOnly });
-      void this.resync();
+      // The document goes back to what the server holds: what it refused must not vanish with it.
+      void this.resync("unconfirmed");
       return;
     }
     const wasReadOnly = this.state.readOnly;
@@ -612,13 +636,19 @@ export class DocSession {
     await this.provider.connect().catch(() => undefined);
   }
 
-  /** Drop the Y.Doc, its local copy and the provider, then start over from the server state. */
-  async resync(preserveText = false): Promise<void> {
+  /**
+   * Drop the Y.Doc, its local copy and the provider, then start over from the server state.
+   * `preserveText` keeps local text for the person to copy; it stays in this tab and is never sent.
+   * `true` keeps every file. "unconfirmed" keeps the files this client changed since the server
+   * last confirmed everything, one snapshot per file: a share at its size limit refuses every
+   * keystroke, and neither everyone's files nor a copy per keystroke would help.
+   */
+  async resync(preserveText: boolean | "unconfirmed" = false): Promise<void> {
     if (this.destroyed || this.left) return;
     if (preserveText) {
       // A refusal has no per-file acknowledgement. Keep a conservative snapshot, including
       // orphaned text roots and offline edits, rather than guessing which local text was refused.
-      const unsentText = [...this.state.unsentText];
+      let unsentText = [...this.state.unsentText];
       const files = this.doc.getMap<Y.Map<unknown>>(YDOC.files);
       for (const name of this.doc.share.keys()) {
         if (!name.startsWith(YDOC.fileText(""))) continue;
@@ -626,11 +656,15 @@ export class DocSession {
         if (!(root instanceof Y.Text) && root?.constructor !== Y.AbstractType) continue;
         const fileId = name.slice(YDOC.fileText("").length);
         const text = this.doc.getText(name).toString();
+        if (preserveText === "unconfirmed") {
+          if (!this.unconfirmedText.has(fileId) || text === "") continue;
+          unsentText = unsentText.filter((saved) => saved.fileId !== fileId);
+        }
         if (unsentText.some((saved) => saved.fileId === fileId && saved.text === text)) continue;
         const file = files.get(fileId);
         const path = file instanceof Y.Map ? file.get("path") : undefined;
         unsentText.push({
-          id: unsentText.length,
+          id: this.unsentIds++,
           fileId,
           path: typeof path === "string" ? path : fileId,
           text,
@@ -662,6 +696,7 @@ export class DocSession {
     this.doc = new Y.Doc();
     this.editedWhileAway = false;
     this.editsUnconfirmed = false;
+    this.unconfirmedText.clear();
     this.provider = this.createProvider(this.doc);
     this.attachPersistence();
     this.patch({

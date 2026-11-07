@@ -8,6 +8,7 @@ import {
   markDropTipDone,
   resetDropTipMemory,
   showDropTip,
+  subscribeDropTip,
 } from "./drop-tip";
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -30,6 +31,50 @@ const blockedStorage = {
 
 beforeEach(() => resetDropTipMemory());
 afterEach(() => vi.unstubAllGlobals());
+
+describe("subscribeDropTip", () => {
+  function fakeWindow() {
+    const storage = new Set<(event: { key: string | null }) => void>();
+    vi.stubGlobal("window", {
+      addEventListener: (_type: string, listener: (event: { key: string | null }) => void) =>
+        storage.add(listener),
+      removeEventListener: (_type: string, listener: (event: { key: string | null }) => void) =>
+        storage.delete(listener),
+    });
+    return {
+      fire: (key: string | null) => {
+        for (const listener of storage) listener({ key });
+      },
+    };
+  }
+
+  it("hears the mark set in this tab", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    fakeWindow();
+    const heard = vi.fn();
+    const stop = subscribeDropTip(heard);
+    markDropTipDone();
+    expect(heard).toHaveBeenCalledOnce();
+    stop();
+    markDropTipDone();
+    expect(heard).toHaveBeenCalledOnce();
+  });
+
+  it("hears another tab through storage events, for this key or a cleared store only", () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const { fire } = fakeWindow();
+    const heard = vi.fn();
+    const stop = subscribeDropTip(heard);
+    fire("gachipad.other");
+    expect(heard).not.toHaveBeenCalled();
+    fire(DROP_TIP_STORAGE_KEY);
+    fire(null);
+    expect(heard).toHaveBeenCalledTimes(2);
+    stop();
+    fire(DROP_TIP_STORAGE_KEY);
+    expect(heard).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("dropTipDone", () => {
   it("is false for a browser that never dismissed the tip", () => {

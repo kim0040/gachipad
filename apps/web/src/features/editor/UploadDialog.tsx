@@ -1,9 +1,11 @@
 import { defaultSettings } from "@gachipad/shared";
 import { Button, Dialog, DialogContent, Spinner, toast } from "@gachipad/ui";
 import { FolderUp, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { canPickFolders, useDragCapable } from "../../lib/appearance";
 import { useT } from "../../lib/i18n";
 import { usePublicSettings } from "../../lib/public-settings";
+import { markDropTipDone } from "../tour/drop-tip";
 import { useDocumentPermissions, useEditor } from "./context";
 import { useFilesDenial } from "./drop-permissions";
 import { collectDrop, type DroppedFiles } from "./dropped-files";
@@ -29,6 +31,15 @@ export function useImport() {
   allowed.current = { files: canImport, language: canChangeLanguage };
   const limit = useRef<number | undefined>(undefined);
   limit.current = ctx.state.tooLarge ?? settings?.maxDocBytes ?? DEFAULT_MAX_DOC_BYTES;
+  const panel = useRef(ctx.panel.name);
+  panel.current = ctx.panel.name;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   return async (input: File[] | DroppedFiles): Promise<ImportResult | null> => {
     const { files, skipped } = Array.isArray(input) ? { files: input, skipped: [] } : input;
     if (!canImport) {
@@ -58,18 +69,32 @@ export function useImport() {
         })
       : null;
     if (progress) await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    // Reading can outlast this document: a resync replaces it, leaving the page ends it.
+    const { session } = ctx;
+    const doc = session.doc;
+    const epoch = session.docEpoch;
     try {
-      const result = await importFiles(ctx.doc, files, {
+      const result = await importFiles(doc, files, {
         skipped,
+        isCurrent: () => mounted.current && session.doc === doc && session.docEpoch === epoch,
         canChangeLanguage: () => allowed.current.language,
         mayApply: () => allowed.current.files,
         maxDocBytes: () => limit.current,
       });
+      if (result.stale) {
+        toast({ title: t("toast.import.stale"), tone: "warning" });
+        return result;
+      }
       if (result.refused) {
         toast({ title: t("upload.denied.ownerOnly"), tone: "warning" });
         return result;
       }
-      if (result.firstId) ctx.setActiveFileId(result.firstId);
+      if (result.added > 0) markDropTipDone();
+      if (result.firstId) {
+        ctx.setActiveFileId(result.firstId);
+        // History and the narrow file sheet would hide the file that was just added.
+        if (panel.current === "history" || panel.current === "files") ctx.closePanel();
+      }
       for (const summary of summarizeImport(t, result)) toast(summary);
       return result;
     } catch {
@@ -91,6 +116,8 @@ export function UploadDialog() {
   const [over, setOver] = useState(false);
   const filesInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const dragCapable = useDragCapable();
+  const pickFolders = dragCapable && canPickFolders();
 
   const handle = async (input: File[] | DroppedFiles) => {
     const count = Array.isArray(input) ? input.length : input.files.length;
@@ -102,7 +129,12 @@ export function UploadDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && ctx.closePanel()}>
-      <DialogContent size="md" title={t("upload.title")} closeLabel={t("common.close")}>
+      <DialogContent
+        size="md"
+        title={t(pickFolders ? "upload.title" : "upload.titleFiles")}
+        closeLabel={t("common.close")}
+        data-file-drop-modal=""
+      >
         {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop target; the buttons inside do the same job from the keyboard */}
         <div
           role="presentation"
@@ -125,14 +157,18 @@ export function UploadDialog() {
           ) : (
             <>
               <Upload aria-hidden="true" className="size-6 text-fg-3" />
-              <p className="text-body-sm">{t("upload.dropHint")}</p>
+              <p className="text-body-sm">
+                {t(dragCapable ? "upload.dropHint" : "upload.pickHint")}
+              </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <Button onClick={() => filesInput.current?.click()} leading={<Upload />}>
                   {t("upload.browseAction")}
                 </Button>
-                <Button onClick={() => folderInput.current?.click()} leading={<FolderUp />}>
-                  {t("upload.folderAction")}
-                </Button>
+                {pickFolders ? (
+                  <Button onClick={() => folderInput.current?.click()} leading={<FolderUp />}>
+                    {t("upload.folderAction")}
+                  </Button>
+                ) : null}
               </div>
             </>
           )}

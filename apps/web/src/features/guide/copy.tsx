@@ -21,12 +21,14 @@ export interface GuideSettings {
   expiryHours: number;
   historyDays: number;
   uploadMB: number;
+  docMB: number;
 }
 
 export const DEFAULT_GUIDE_SETTINGS: GuideSettings = {
   expiryHours: FACTS.defaultExpiryHours,
   historyDays: FACTS.defaultHistoryDays,
   uploadMB: FACTS.defaultUploadMB,
+  docMB: FACTS.defaultDocMB,
 };
 
 // Each language's text is its own chunk, imported when a guide page first needs it. The service

@@ -6,11 +6,14 @@ import * as Y from "yjs";
 import type { DocSession } from "../../../lib/collab/session";
 import type { RemoteCursorMode } from "../../../lib/prefs";
 import {
+  CARET_HIT_SLOP_PX,
   caretAt,
   type DrawnCaret,
   densityOf,
+  flagHangsBelow,
   flashesName,
   isPinned,
+  linesApart,
   movedChanged,
   nextCrowded,
   peopleOnFile,
@@ -147,6 +150,10 @@ interface CaretLook {
   pinned: boolean;
   /** Hovered, or highlighted from the participant list: full strength and the name. */
   spot: boolean;
+  /** The setting is carets only: a name that is still fading goes now. */
+  quiet: boolean;
+  /** Too close to the top of what is visible for the flag to fit above the caret. */
+  below: boolean;
 }
 
 class CaretMarker implements LayerMarker {
@@ -167,13 +174,16 @@ class CaretMarker implements LayerMarker {
       a.name === b.name &&
       a.flashes === b.flashes &&
       a.pinned === b.pinned &&
-      a.spot === b.spot
+      a.spot === b.spot &&
+      a.quiet === b.quiet &&
+      a.below === b.below
     );
   }
 
   draw(): HTMLElement {
     const root = document.createElement("div");
     root.className = "cm-remote-caret";
+    root.dataset.peer = String(this.id);
     const bar = document.createElement("div");
     bar.className = "cm-remote-caret-bar";
     const flag = document.createElement("div");
@@ -203,17 +213,17 @@ class CaretMarker implements LayerMarker {
   }
 
   private apply(root: HTMLElement) {
-    const { x, y, height, color, name, pinned, spot } = this.look;
+    const { x, y, height, color, name, pinned, spot, quiet, below } = this.look;
     root.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     root.style.height = `${height}px`;
     root.style.setProperty("--rc", color);
     root.style.setProperty("--rc-fg", labelColorFor(color));
-    // On the first rows the flag would be clipped above the editor, so it hangs below instead.
-    root.classList.toggle("is-top", y < 22);
+    // On the first visible rows the flag would be clipped above the editor, so it hangs below.
+    root.classList.toggle("is-top", below);
     root.toggleAttribute("data-pinned", pinned);
     root.toggleAttribute("data-spot", spot);
     // Without the flash attributes no animation is left to start over when this ends.
-    if (pinned || spot) {
+    if (pinned || spot || quiet) {
       delete root.dataset.flag;
       delete root.dataset.flagFrom;
       delete root.dataset.flashed;
@@ -419,7 +429,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
   const active = new Set<number>();
   const flashes = new Map<number, number>();
   let textChanged = false;
-  let drawn: DrawnCaret[] = [];
+  let drawn: (DrawnCaret & { below: boolean })[] = [];
   let pointer: { x: number; y: number } | null = null;
   let hovered: number | null = null;
   // Escape hid this caret's name: it stays hidden until the pointer has left it.
@@ -433,7 +443,26 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       (pointer.y - base.top) / view.scaleY,
     );
     if (hit !== dismissed) dismissed = null;
+    if (hit === null && hovered !== null && overFlag(view, hovered)) return hovered;
     return hit === dismissed ? null : hit;
+  };
+
+  // The name it opened counts as the caret, so it can be read and is not lost on the way there
+  // (WCAG 1.4.13). The flag takes no pointer events, so this asks where it is: one read, only while
+  // a name is open by hover.
+  const overFlag = (view: EditorView, id: number): boolean => {
+    if (!pointer) return false;
+    const flag = view.dom.querySelector(
+      `.cm-remote-caret[data-peer="${id}"] .cm-remote-caret-flag`,
+    );
+    if (!flag) return false;
+    const rect = flag.getBoundingClientRect();
+    return (
+      pointer.x >= rect.left - CARET_HIT_SLOP_PX &&
+      pointer.x <= rect.right + CARET_HIT_SLOP_PX &&
+      pointer.y >= rect.top - CARET_HIT_SLOP_PX &&
+      pointer.y <= rect.bottom + CARET_HIT_SLOP_PX
+    );
   };
 
   const carets = layer({
@@ -442,6 +471,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
     update: needsRedraw,
     markers(view) {
       const base = layerBase(view);
+      const scrollTop = view.scrollDOM.scrollTop;
       const { doc, selection } = view.state;
       const mode = view.state.facet(remoteCursorMode);
       const crowded = view.state.field(crowdedField);
@@ -450,19 +480,35 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       const pushedByText = textChanged;
       textChanged = false;
 
-      const placed: { remote: Remote; caret: DrawnCaret; wasActive: boolean }[] = [];
+      // Asked for at most once a draw, and only when someone's name depends on it.
+      let myY: number | null | undefined;
+      const mineAt = (): number | null => {
+        if (myY === undefined) {
+          const coords = view.coordsAtPos(selection.main.head);
+          myY = coords ? (coords.top - base.top) / view.scaleY : null;
+        }
+        return myY;
+      };
+
+      const placed: {
+        remote: Remote;
+        caret: DrawnCaret & { below: boolean };
+        wasActive: boolean;
+      }[] = [];
       for (const remote of remotesOf(view)) {
         const wasActive = active.delete(remote.awarenessId);
         const coords = view.coordsAtPos(remote.head, remote.head > remote.anchor ? -1 : 1);
         if (!coords) continue;
+        const y = Math.round(((coords.top - base.top) / view.scaleY) * 10) / 10;
         placed.push({
           remote,
           wasActive,
           caret: {
             id: remote.awarenessId,
             x: Math.round(((coords.left - base.left) / view.scaleX) * 10) / 10,
-            y: Math.round(((coords.top - base.top) / view.scaleY) * 10) / 10,
+            y,
             height: Math.max(14, (coords.bottom - coords.top) / view.scaleY),
+            below: flagHangsBelow(y, scrollTop),
           },
         });
       }
@@ -476,7 +522,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
           host: remote.host,
         });
         const spot = hovered === remote.awarenessId || spotlight === remote.clientId;
-        // Lines come from the document: the other person may be far outside the rendered text.
+        // The other person may be far outside the rendered text, and then only lines can tell.
         const flash =
           wasActive &&
           !pinned &&
@@ -484,7 +530,14 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
           flashesName(
             mode,
             crowded,
-            Math.abs(doc.lineAt(remote.head).number - doc.lineAt(selection.main.head).number),
+            densityOf(mode, crowded) === "crowded"
+              ? linesApart(
+                  Math.abs(doc.lineAt(remote.head).number - doc.lineAt(selection.main.head).number),
+                  caret.y,
+                  mineAt(),
+                  view.defaultLineHeight,
+                )
+              : 0,
           );
         const count = (flashes.get(remote.awarenessId) ?? 0) + (flash ? 1 : 0);
         if (flash) flashes.set(remote.awarenessId, count);
@@ -501,6 +554,8 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
             active: wasActive && !pushedByText,
             pinned,
             spot,
+            quiet: mode === "carets",
+            below: caret.below,
           }),
         };
       });
@@ -512,6 +567,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
   const watcher = ViewPlugin.define((view) => {
     let frame = 0;
     let hoverFrame = 0;
+    let scrollFrame = 0;
     const refresh = () => view.dispatch({ effects: refreshRemote.of(null) });
     const schedule = () => {
       if (frame) return;
@@ -566,7 +622,18 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       hovered = null;
       refresh();
     };
-    // Seen on the way down and left alone: Vim mode and the search panel use Escape too.
+    // Scrolling inside the rendered text redraws nothing, so a caret reaching the top edge is
+    // looked for here: one read a frame, from what the last draw stored.
+    const onScroll = () => {
+      if (scrollFrame) return;
+      scrollFrame = requestAnimationFrame(() => {
+        scrollFrame = 0;
+        const scrollTop = view.scrollDOM.scrollTop;
+        if (drawn.some((caret) => flagHangsBelow(caret.y, scrollTop) !== caret.below)) refresh();
+      });
+    };
+    // Wherever focus is, seen on the way down and left alone: Vim mode and the search panel use
+    // Escape too.
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || hovered === null) return;
       dismissed = hovered;
@@ -576,7 +643,8 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
     awareness?.on("change", onChange);
     view.scrollDOM.addEventListener("mousemove", onMouseMove, { passive: true });
     view.scrollDOM.addEventListener("mouseleave", onMouseLeave, { passive: true });
-    view.dom.addEventListener("keydown", onKeyDown, { capture: true, passive: true });
+    view.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("keydown", onKeyDown, { capture: true, passive: true });
     return {
       update(update) {
         if (update.docChanged) textChanged = true;
@@ -585,9 +653,11 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
         awareness?.off("change", onChange);
         view.scrollDOM.removeEventListener("mousemove", onMouseMove);
         view.scrollDOM.removeEventListener("mouseleave", onMouseLeave);
-        view.dom.removeEventListener("keydown", onKeyDown, { capture: true });
+        view.scrollDOM.removeEventListener("scroll", onScroll);
+        window.removeEventListener("keydown", onKeyDown, { capture: true });
         if (frame) cancelAnimationFrame(frame);
         if (hoverFrame) cancelAnimationFrame(hoverFrame);
+        if (scrollFrame) cancelAnimationFrame(scrollFrame);
       },
     };
   });

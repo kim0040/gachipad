@@ -1,20 +1,13 @@
 import { Button, Dialog, DialogContent } from "@gachipad/ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDragCapable } from "../../lib/appearance";
 import { useT } from "../../lib/i18n";
 import { useDocumentPermissions, useEditor } from "../editor/context";
 import { DropIllustration } from "./DropIllustration";
 import { type Placement, placePopover, popoverWidth } from "./place";
 import { markTourSeen } from "./seen";
-import {
-  anchorOf,
-  availableSteps,
-  type Box,
-  bodyOf,
-  boxOf,
-  isTouchOnly,
-  type TourAnchor,
-} from "./steps";
+import { anchorOf, availableSteps, type Box, bodyOf, boxOf, type TourAnchor } from "./steps";
 import "./tour.css";
 
 /** Room around the highlighted element inside the spotlight. */
@@ -66,8 +59,7 @@ export default function Tour({ onFinish, onExited }: TourProps) {
   );
   const step = steps[index];
   const last = index === steps.length - 1;
-  // Fixed for the run: a tour does not change its words when the window is resized.
-  const [touchOnly] = useState(isTouchOnly);
+  const touchOnly = !useDragCapable();
   const limited = !useDocumentPermissions().files;
   const body = step ? t(bodyOf(step, { limited, touchOnly })) : "";
 

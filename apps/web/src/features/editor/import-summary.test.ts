@@ -1,7 +1,7 @@
 import { createT, type Locale } from "@gachipad/i18n";
 import { describe, expect, it } from "vitest";
-import type { Skip } from "./dropped-files";
-import { skipDescription, skipToast, summarizeImport } from "./import-summary";
+import { MAX_WALKED_ENTRIES, type Skip } from "./dropped-files";
+import { skipDescription, skipReasonText, skipToast, summarizeImport } from "./import-summary";
 
 const base = { added: 0, addedPaths: [], renamed: [], duplicates: [], skipped: [] };
 
@@ -105,6 +105,17 @@ describe.each(["ko", "en"] as Locale[])("summarizeImport (%s)", (locale) => {
     }
     expect(skipDescription(t, [{ name: "x", reason: "tooBig" }])).toContain("5MB");
     expect(skipDescription(t, [{ name: "x", reason: "tooMany" }])).toContain("100");
+  });
+
+  it("says the rest was not checked, without counting it as skipped", () => {
+    const stopped = { name: "", reason: "notChecked", count: 0 } as const;
+    const words = skipReasonText(t, "notChecked");
+    expect(words).toContain(MAX_WALKED_ENTRIES.toLocaleString("en"));
+    expect(skipDescription(t, [{ name: "a.png", reason: "binary" }, stopped])).toContain(words);
+    expect(skipToast(t, [{ name: "a.png", reason: "binary" }, stopped])?.title).toBe(
+      t("toast.import.skipped", { count: 1 }),
+    );
+    expect(skipToast(t, [stopped])).toEqual(expect.objectContaining({ title: words }));
   });
 
   it("counts skips without a name instead of listing them", () => {

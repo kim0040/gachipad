@@ -138,7 +138,7 @@ export function EditorPane(props: EditorPaneProps) {
           ),
           parts.remoteCursors.of(remoteCursorMode.of(initialPrefs.remoteCursors)),
           remoteCursors(session, ytext, fileId),
-          awarenessBridge(session, fileId),
+          awarenessBridge(session, fileId, undoManager),
           commentsExtension({
             session,
             ytext,

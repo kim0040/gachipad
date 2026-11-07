@@ -1,6 +1,5 @@
 import type { MessageKey } from "@gachipad/i18n";
-import { useSyncExternalStore } from "react";
-import { useIsNarrow } from "../../lib/appearance";
+import { useDragCapable, useIsNarrow } from "../../lib/appearance";
 import { useT } from "../../lib/i18n";
 
 /**
@@ -18,23 +17,9 @@ export function emptyHintKey(options: {
   return options.touch ? "empty.file.bodyTouch" : "empty.file.body";
 }
 
-const COARSE = "(pointer: coarse)";
-
-function useCoarsePointer(): boolean {
-  return useSyncExternalStore(
-    (callback) => {
-      const list = window.matchMedia(COARSE);
-      list.addEventListener("change", callback);
-      return () => list.removeEventListener("change", callback);
-    },
-    () => window.matchMedia(COARSE).matches,
-    () => false,
-  );
-}
-
 export function useEmptyHint(options: { readOnly: boolean; canImport: boolean }): string {
   const t = useT();
   const narrow = useIsNarrow();
-  const coarse = useCoarsePointer();
-  return t(emptyHintKey({ ...options, touch: narrow || coarse }));
+  const dragCapable = useDragCapable();
+  return t(emptyHintKey({ ...options, touch: narrow || !dragCapable }));
 }
