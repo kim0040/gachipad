@@ -525,6 +525,27 @@ test("a busy file: fainter selections, a name only for someone who starts, two a
     expect(probe.flashes[first.name]).toBe(1);
     expect(probe.glides[first.name]).toBeUndefined();
 
+    // One person in two tabs is one person: starting in the second tab right after the first is
+    // not starting after being quiet.
+    await page.waitForTimeout(10_500);
+    await resetProbe(page);
+    const secondTab = await first.context.newPage();
+    await joinByLink({ ...first, page: secondTab }, shareIdOf(page));
+    await waitForEditor(secondTab);
+    await secondTab.getByTestId("device-choice-skip").click();
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(5);
+    await first.page.keyboard.type("a");
+    await expect.poll(() => editorText(page)).toContain("a");
+    await expect
+      .poll(async () => (await readProbe(page)).flashes[first.name] ?? 0)
+      .toBeGreaterThan(0);
+    await secondTab.locator(".cm-content").click();
+    await secondTab.keyboard.type("b");
+    await page.waitForTimeout(300);
+    expect((await readProbe(page)).flashes[first.name]).toBe(1);
+    await secondTab.close();
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(4);
+
     // Three start at once after another quiet spell: two names at a time at most, so one gets
     // none, and is not given one later when the others have faded.
     await page.waitForTimeout(10_500);
@@ -674,8 +695,13 @@ test("a crowded file: no name by itself, dimmer bars and selections, the host pi
     await far.page.keyboard.type("!");
     await expect(flagOf(page, far.name)).toHaveCSS("opacity", "1");
     await expectFlagHidden(page, far.name);
+    // Back in Auto: a name still showing goes at once, because none shows by itself here.
+    await far.page.keyboard.type("!");
+    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "1");
     await chooseCursors(page, "Auto");
     await expect(editor).toHaveAttribute("data-remote-cursors", "crowded");
+    await expect(caretOf(page, far.name)).not.toHaveAttribute("data-flag", /./);
+    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "0");
 
     // Leaving: still crowded at 7, busy at 6, back to normal only at 2.
     const [fifth, sixth, seventh, eighth] = others as [User, User, User, User];

@@ -482,6 +482,9 @@ export class DocSession {
     this.left = true;
     clearDiagnosticContext(this.diagnosticRef);
     this.epoch++;
+    // Nothing is open any more, also while the screen that says so stays up.
+    sessions.delete(this);
+    syncEditingLock();
     this.credentials = {};
     this.clearRetry();
     if (this.docListener) this.doc.off("update", this.docListener);

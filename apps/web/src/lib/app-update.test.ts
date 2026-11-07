@@ -267,6 +267,7 @@ describe("app update", () => {
       };
       const onWindow = new Map<string, () => void>();
       const onDocument = new Map<string, () => void>();
+      const timers: Array<() => void> = [];
       vi.stubEnv("PROD", true);
       vi.stubGlobal("navigator", { serviceWorker: {}, locks });
       vi.stubGlobal("sessionStorage", storage);
@@ -275,8 +276,9 @@ describe("app update", () => {
         addEventListener: (name: string, handler: () => void) => void onDocument.set(name, handler),
       });
       vi.stubGlobal("window", {
-        location: { reload },
+        location: { reload, pathname: "/" },
         setInterval: vi.fn(),
+        setTimeout: (handler: () => void) => timers.push(handler),
         addEventListener: (name: string, handler: () => void) => void onWindow.set(name, handler),
       });
       vi.stubGlobal("fetch", answer("1.0.0"));
@@ -289,6 +291,7 @@ describe("app update", () => {
         registration,
         onWindow,
         onDocument,
+        timers,
         locks,
         /** Workbox's order for a worker already waiting: onNeedRefresh, then onRegisteredSW. */
         async load() {
@@ -339,26 +342,106 @@ describe("app update", () => {
       expect(tab.reload).not.toHaveBeenCalled();
     });
 
-    it("applies a worker still installing at load, which Workbox does not report", async () => {
+    describe("a worker still installing at load, which Workbox does not report", () => {
+      function installingTab(active: object | null) {
+        const tab = browser();
+        const waiting = tab.registration.waiting;
+        tab.registration.waiting = null;
+        const listeners: Array<() => void> = [];
+        const installing = {
+          state: "installing",
+          addEventListener: (_name: string, handler: () => void) => void listeners.push(handler),
+        };
+        Object.assign(tab.registration, { installing, active });
+        return {
+          tab,
+          listeners,
+          async installed() {
+            installing.state = "installed";
+            tab.registration.waiting = waiting;
+            for (const handler of listeners) handler();
+            await settle();
+          },
+        };
+      }
+
+      it("is applied when it has installed, not before", async () => {
+        const { tab, listeners, installed } = installingTab({});
+        const { update } = await tab.load();
+        for (const handler of listeners) handler();
+        await settle();
+        expect(tab.skipWaiting).not.toHaveBeenCalled();
+        expect(update.appUpdateState().available).toBe(false);
+        await installed();
+        expect(tab.skipWaiting).toHaveBeenCalledTimes(1);
+      });
+
+      it("offers the prompt when the page was touched meanwhile", async () => {
+        const { tab, installed } = installingTab({});
+        const { update } = await tab.load();
+        tab.onWindow.get("pointerdown")?.();
+        await installed();
+        expect(tab.skipWaiting).not.toHaveBeenCalled();
+        expect(update.appUpdateState().available).toBe(true);
+      });
+
+      it("is no update on a first visit, with nothing active", async () => {
+        const { tab, listeners, installed } = installingTab(null);
+        const { update } = await tab.load();
+        expect(listeners).toHaveLength(0);
+        await installed();
+        expect(tab.skipWaiting).not.toHaveBeenCalled();
+        expect(update.appUpdateState().available).toBe(false);
+      });
+    });
+
+    it("counts a click from assistive technology as touching the page", async () => {
       const tab = browser();
-      const waiting = tab.registration.waiting;
       tab.registration.waiting = null;
-      const listeners: Array<() => void> = [];
-      const installing = {
-        state: "installing",
-        addEventListener: (_name: string, handler: () => void) => void listeners.push(handler),
-      };
-      Object.assign(tab.registration, { installing });
+      const { sw } = await tab.load();
+      tab.onWindow.get("click")?.();
+      tab.registration.waiting = tab.worker;
+      sw?.onNeedRefresh?.();
+      await settle();
+      expect(tab.skipWaiting).not.toHaveBeenCalled();
+    });
+
+    it.each(["/abc1234567", "/lab/abc1234567", "/new"])(
+      "leaves %s to the prompt, whatever phase it is in",
+      async (pathname) => {
+        const tab = browser();
+        (window.location as { pathname: string }).pathname = pathname;
+        await tab.load();
+        expect(tab.skipWaiting).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["/", "/guide", "/guide/how", "/me", "/admin"])(
+      "applies on %s, which has no document",
+      async (pathname) => {
+        const tab = browser();
+        (window.location as { pathname: string }).pathname = pathname;
+        await tab.load();
+        expect(tab.skipWaiting).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("tries again when another tab has closed its document, with no other event", async () => {
+      const query = vi.fn(async () => ({ held: [{ name: "gachipad-editing" }], pending: [] }));
+      const tab = browser({ locks: { query } });
       await tab.load();
       expect(tab.skipWaiting).not.toHaveBeenCalled();
-      for (const handler of listeners) handler();
-      await settle();
-      expect(tab.skipWaiting).not.toHaveBeenCalled();
-      installing.state = "installed";
-      tab.registration.waiting = waiting;
-      for (const handler of listeners) handler();
+      expect(tab.timers).toHaveLength(1);
+      query.mockResolvedValue({ held: [], pending: [] });
+      tab.timers.shift()?.();
       await settle();
       expect(tab.skipWaiting).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not keep asking without Web Locks", async () => {
+      const tab = browser({ locks: null });
+      await tab.load();
+      expect(tab.timers).toHaveLength(0);
     });
 
     it("applies a worker that starts waiting after the registration is known", async () => {

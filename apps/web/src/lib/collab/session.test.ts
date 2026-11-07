@@ -142,6 +142,17 @@ describe("the editing lock other tabs read before applying an update", () => {
     third.destroy();
   });
 
+  it("is released when the session leaves and its screen stays up", async () => {
+    const locks = fakeLocks();
+    vi.stubGlobal("navigator", { locks });
+    const session = open();
+    expect(locks.held).toHaveLength(1);
+    await session.leave();
+    expect(hasOpenSessions()).toBe(false);
+    expect(locks.held).toHaveLength(0);
+    session.destroy();
+  });
+
   it("opens a document without Web Locks, and when the lock is refused", async () => {
     vi.stubGlobal("navigator", {});
     open().destroy();

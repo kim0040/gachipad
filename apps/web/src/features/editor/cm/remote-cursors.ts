@@ -156,7 +156,7 @@ interface CaretLook {
   pinned: boolean;
   /** Hovered, or highlighted from the participant list: full strength and the name. */
   spot: boolean;
-  /** The setting is carets only: a name that is still fading goes now. */
+  /** No name shows by itself (carets only, or crowded): one that is still fading goes now. */
   quiet: boolean;
   /** Too close to the top of what is visible for the flag to fit above the caret. */
   below: boolean;
@@ -433,8 +433,9 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
   // whose new position cannot be resolved yet (its text is still on the way) stays in `active`.
   const lastMoved = new Map<number, unknown>();
   const active = new Set<number>();
-  // When each person last did something, and who began since the last draw after a quiet spell.
-  const lastActivity = new Map<number, number>();
+  // When each person last did something, over all their tabs, and which carets began since the
+  // last draw after a quiet spell.
+  const lastActivity = new Map<string, number>();
   const started = new Set<number>();
   // When the name flashed for each person stops showing; counts the names on screen.
   const flashEnds = new Map<number, number>();
@@ -448,23 +449,22 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
 
   // Where the pointer is now, not where it was when the caret came under it: a name opens only
   // when the pointer itself moved onto the caret.
+  const caretUnderPointer = (
+    view: EditorView,
+    base: { left: number; top: number },
+  ): number | null =>
+    pointer
+      ? caretAt(drawn, (pointer.x - base.left) / view.scaleX, (pointer.y - base.top) / view.scaleY)
+      : null;
+
   const stillHovered = (view: EditorView, base: { left: number; top: number }): number | null => {
     if (hovered === null || !pointer) return null;
-    const hit = caretAt(
-      drawn,
-      (pointer.x - base.left) / view.scaleX,
-      (pointer.y - base.top) / view.scaleY,
-    );
-    return hit === hovered || overFlag(view, hovered) ? hovered : null;
+    return caretUnderPointer(view, base) === hovered || overFlag(view, hovered) ? hovered : null;
   };
 
   const hoverAt = (view: EditorView, base: { left: number; top: number }): number | null => {
     if (!pointer) return null;
-    const hit = caretAt(
-      drawn,
-      (pointer.x - base.left) / view.scaleX,
-      (pointer.y - base.top) / view.scaleY,
-    );
+    const hit = caretUnderPointer(view, base);
     if (hit !== dismissed) dismissed = null;
     if (hit === null && hovered !== null && overFlag(view, hovered)) return hovered;
     return hit === dismissed ? null : hit;
@@ -530,6 +530,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       }
       drawn = placed.map((entry) => entry.caret);
       hovered = hovered === null ? null : stillHovered(view, base);
+      if (dismissed !== null && caretUnderPointer(view, base) !== dismissed) dismissed = null;
 
       // Names still showing from an earlier flash, plus the ones granted in this draw.
       const now = performance.now();
@@ -546,6 +547,8 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
           host: remote.host,
         });
         const spot = hovered === remote.awarenessId || spotlight === remote.clientId;
+        // Showing for another reason now: its flash no longer takes one of the slots.
+        if ((pinned || spot) && flashEnds.delete(remote.awarenessId)) namesShowing--;
         const flash = wasActive && !pinned && !spot && flashesName(density, began, namesShowing);
         if (flash) {
           if (!flashEnds.has(remote.awarenessId)) namesShowing++;
@@ -566,7 +569,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
             active: wasActive && !pushedByText && glidesIn(density),
             pinned,
             spot,
-            quiet: mode === "carets",
+            quiet: density === "carets" || density === "crowded",
             below: caret.below,
           }),
         };
@@ -602,7 +605,6 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       for (const id of removed) {
         lastMoved.delete(id);
         active.delete(id);
-        lastActivity.delete(id);
         started.delete(id);
         flashEnds.delete(id);
         flashes.delete(id);
@@ -614,14 +616,14 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
         if (!state) continue;
         if (state.fileId !== fileId) {
           active.delete(id);
-          lastActivity.delete(id);
           started.delete(id);
           flashEnds.delete(id);
         } else if (movedChanged(lastMoved.get(id), state.moved)) {
           active.add(id);
           const now = performance.now();
-          if (startedAfterQuiet(lastActivity.get(id), now)) started.add(id);
-          lastActivity.set(id, now);
+          const person = state.user?.clientId ?? String(id);
+          if (startedAfterQuiet(lastActivity.get(person), now)) started.add(id);
+          lastActivity.set(person, now);
         }
         lastMoved.set(id, state.moved);
       }
@@ -655,7 +657,14 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
         const scrollTop = view.scrollDOM.scrollTop;
-        if (drawn.some((caret) => flagHangsBelow(caret.y, scrollTop) !== caret.below)) refresh();
+        // The caret scrolled away from under a resting pointer: its name goes with it.
+        const leftPointer = hovered !== null && stillHovered(view, layerBase(view)) === null;
+        if (leftPointer) hovered = null;
+        if (
+          leftPointer ||
+          drawn.some((caret) => flagHangsBelow(caret.y, scrollTop) !== caret.below)
+        )
+          refresh();
       });
     };
     // Wherever focus is, seen on the way down and left alone: Vim mode and the search panel use

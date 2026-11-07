@@ -5,8 +5,8 @@ import { EDITING_LOCK, flushPendingSessions, hasOpenSessions } from "./collab/se
 /**
  * Picking up a new build after the server was updated. The service worker no longer swaps itself
  * in silently: a new build waits, and the prompt offers a reload on a click, so a live editing
- * session is never cut off. Only a page nobody is using takes the build by itself: no open document
- * in any tab and not touched since it loaded (applyWhenIdle). The server's `/api/version` is compared
+ * session is never cut off. Only a page nobody is using takes the build by itself: not a share, no
+ * open document in any tab and not touched since it loaded (applyWhenIdle). The server's `/api/version` is compared
  * with this build's version on start, when the tab becomes visible, every half hour and after every
  * collab reconnect (a server restart), which also covers a changed collab protocol.
  */
@@ -25,9 +25,13 @@ const MIN_GAP_MS = 60_000;
 const APPROVAL_MS = 30_000;
 const AUTO_APPLY_GAP_MS = 5 * 60_000;
 const AUTO_APPLY_KEY = "gachipad.update.autoApplied";
+const IDLE_RETRY_MS = 10_000;
+/** Pages with no document or a wait of their own. A share's page stays with the prompt in every phase. */
+const IDLE_PAGE = /^\/(?:guide(?:\/.*)?|me\/?|admin\/?)?$/;
 /** Half-typed forms, dropped files in memory, someone reading: any of these keeps the prompt. */
 const TOUCH_EVENTS = [
   "pointerdown",
+  "click",
   "keydown",
   "wheel",
   "touchstart",
@@ -45,6 +49,7 @@ let lastCheck = 0;
 let started = false;
 let reloadApprovedUntil = 0;
 let touched = false;
+let idleRetry = false;
 
 function publish(next: AppUpdateState) {
   state = next;
@@ -89,10 +94,13 @@ export function startAppUpdates(): void {
         // A worker already waiting at load fires onNeedRefresh before this, with no registration yet.
         void applyWhenIdle();
         // Refreshed while the new build was still downloading: Workbox listens for updatefound, which
-        // has passed, so it never reports this worker as waiting.
-        const installing = value?.installing;
+        // has passed, so it never reports this worker as waiting. On a first visit, with nothing
+        // active, the worker installing is not an update.
+        const installing = value?.active ? value.installing : null;
         installing?.addEventListener("statechange", () => {
-          if (installing.state === "installed") void applyWhenIdle();
+          if (installing.state !== "installed") return;
+          markAvailable(null);
+          void applyWhenIdle();
         });
       },
     });
@@ -197,10 +205,22 @@ function claimAutoApply(): boolean {
  */
 async function applyWhenIdle(): Promise<void> {
   if (!registration?.waiting || !updateServiceWorker || touched || hasOpenSessions()) return;
-  if (await editingInSomeTab()) return;
+  if (!IDLE_PAGE.test(window.location.pathname)) return;
+  if (await editingInSomeTab()) {
+    // Another tab can close its document without this one hearing of it.
+    if (navigator.locks && !idleRetry) {
+      idleRetry = true;
+      window.setTimeout(() => {
+        idleRetry = false;
+        void applyWhenIdle();
+      }, IDLE_RETRY_MS);
+    }
+    return;
+  }
   const worker = registration.waiting;
   // No await from here to the activation: a document cannot open in that gap.
-  if (!worker || touched || hasOpenSessions() || !claimAutoApply()) return;
+  if (!worker || touched || hasOpenSessions()) return;
+  if (!IDLE_PAGE.test(window.location.pathname) || !claimAutoApply()) return;
   worker.addEventListener("statechange", () => {
     if (worker.state === "activated" && !touched && !hasOpenSessions()) void reloadWhenSynced();
   });
