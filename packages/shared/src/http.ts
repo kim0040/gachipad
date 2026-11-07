@@ -318,6 +318,8 @@ export const publicSettingsSchema = z.object({
   anonymousTtlHours: z.number().positive(),
   historyRetentionDays: z.number().int().nonnegative(),
   maxUploadMB: z.number().positive(),
+  /** Bytes one share may hold; the editor checks an import against it before applying. */
+  maxDocBytes: z.number().int().positive(),
   guestAllowed: z.boolean(),
 });
 export type PublicSettings = z.infer<typeof publicSettingsSchema>;

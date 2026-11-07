@@ -65,9 +65,22 @@ export function organizeRoutes(app: App, ctx: Ctx): void {
     "/api/settings/public",
     { schema: { response: { 200: publicSettingsSchema } } },
     async () => {
-      const { contact, anonymousTtlHours, historyRetentionDays, maxUploadMB, guestAllowed } =
-        await ctx.settings();
-      return { contact, anonymousTtlHours, historyRetentionDays, maxUploadMB, guestAllowed };
+      const {
+        contact,
+        anonymousTtlHours,
+        historyRetentionDays,
+        maxUploadMB,
+        maxDocBytes,
+        guestAllowed,
+      } = await ctx.settings();
+      return {
+        contact,
+        anonymousTtlHours,
+        historyRetentionDays,
+        maxUploadMB,
+        maxDocBytes,
+        guestAllowed,
+      };
     },
   );
 }
