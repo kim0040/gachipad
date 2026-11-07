@@ -726,6 +726,9 @@ export class Collab implements Extension<CollabContext> {
       }
       const next: Record<string, unknown> = { ...state, user: { clientId, name, color } };
       if (context(connection).role !== "owner") delete next.presenting;
+      // The controller: the owner, or the teacher in a lab (whose students own their copies).
+      if (context(connection).controller) next.host = true;
+      else delete next.host;
       if (JSON.stringify(next).length > AWARENESS_MAX_STATE_BYTES) states.delete(yClientId);
       else states.set(yClientId, next);
     }
