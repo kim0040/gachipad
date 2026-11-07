@@ -119,7 +119,8 @@ export const ko: KoDictionary = {
   "intro.how.step2.body": "6자리 코드나 QR 코드를 보여 주거나, 사람에게 바로 보내요.",
   "intro.how.step3.title": "같이 고치기",
   "intro.how.step3.time": "그다음부터 계속",
-  "intro.how.step3.body": "모두 동시에 입력해도 변경 내용이 충돌 없이 합쳐져요.",
+  "intro.how.step3.body":
+    "모두 동시에 입력해도 변경 내용이 충돌 없이 합쳐져요. 파일은 화면에 끌어다 놓으면 추가돼요.",
   "intro.how.sub": "만들고, 코드를 알리고, 같이 고치면 끝이에요.",
   "intro.fast.title": "같은 네트워크라서 더 빠르게",
   "intro.fast.sub": "링크를 복사해 메신저에 붙여넣을 필요가 없어요.",
@@ -149,8 +150,9 @@ export const ko: KoDictionary = {
     "같은 줄을 함께 고쳐도 글자가 덮어써지지 않아요. 연결이 끊겨도 입력은 남아 있다가 다시 합쳐져요.",
   "intro.features.access.title": "보기 전용·PIN 잠금",
   "intro.features.access.body": "누가 편집할 수 있는지 정하고, 입장 전에 승인할 수 있어요.",
-  "intro.features.files.title": "여러 파일",
-  "intro.features.files.body": "한 공유에 파일을 여러 개 담고, 폴더째 올릴 수 있어요.",
+  "intro.features.files.title": "끌어다 놓아 파일 추가",
+  "intro.features.files.body":
+    "한 공유에 파일을 여러 개 담아요. 파일, 폴더, .zip을 화면 어디에나 끌어다 놓으면 바로 추가되고, 이름이 같아도 덮어쓰지 않아요.",
   "intro.features.history.title": "이력 재생",
   "intro.features.history.body": "코드가 바뀐 과정을 다시 보고 이전 버전으로 복원해요.",
   "intro.features.download.title": "다운로드",
@@ -195,6 +197,13 @@ export const ko: KoDictionary = {
   "intro.footer.contact": "문의: {contact}",
   "intro.footer.noTracking": "광고, 추적, 외부 스크립트가 없어요. 모두 이 서버에서 불러와요.",
   "intro.footer.licenses": "오픈소스 라이선스",
+  "intro.footer.contribute.title": "버그를 찾았거나 기여하고 싶으신가요?",
+  "intro.footer.contribute.body": "GitHub에 제보해 주세요. 언제든 환영해요.",
+  "intro.footer.contribute.contactNote":
+    "GitHub는 소프트웨어 자체를 위한 곳이에요. 이 서버에 대한 문의는 아래 문의처로 보내 주세요.",
+  "intro.footer.contribute.reportAction": "버그 제보",
+  "intro.footer.contribute.guideAction": "기여하기",
+  "intro.footer.contribute.repoAction": "GitHub 저장소",
   "intro.footer.navLabel": "페이지",
 
   // ── Share basics (kept from the first dictionary) ──
@@ -230,6 +239,8 @@ export const ko: KoDictionary = {
   "editor.top.settingsAction": "설정",
   "editor.top.shortcutsAction": "단축키",
   "editor.top.commandAction": "명령 팔레트",
+  "editor.top.helpAction": "사용 안내",
+  "editor.top.uploadAction": "파일 올리기",
 
   // ── Editor: body ──
   "editor.loading": "공유를 여는 중…",
@@ -1197,13 +1208,22 @@ export const ko: KoDictionary = {
     "공유에 들어온 사람이 여기에 보여요. 사람을 누르면 그 사람의 커서를 따라가요.",
   "tour.files.title": "파일",
   "tour.files.body":
-    "탭 하나가 파일 하나예요. 파일을 추가하거나 내 컴퓨터에서 끌어다 놓을 수 있어요.",
+    "탭 하나가 파일 하나예요. 내 컴퓨터의 파일, 폴더, .zip을 화면 아무 곳에나 끌어다 놓으면 바로 추가돼요.",
+  "tour.files.touchBody":
+    "탭 하나가 파일 하나예요. 더 보기 메뉴의 파일 올리기로 파일, 폴더, .zip을 추가할 수 있어요.",
+  "tour.files.limitedBody":
+    "탭 하나가 파일 하나예요. 이 공유에서는 파일을 추가할 수 없어요. 탭을 눌러 다른 파일을 볼 수 있어요.",
+  "tour.dropTip.label": "파일 추가 팁",
+  "tour.dropTip.body": "main.py 같은 파일을 화면으로 끌어다 놓으면 바로 추가돼요.",
+  "tour.dropTip.touchBody": "업로드 버튼으로 파일, 폴더, .zip을 추가할 수 있어요.",
+  "tour.dropTip.openAction": "업로드 열기",
+  "tour.dropTip.dismissAction": "팁 닫기",
   "tour.language.title": "언어",
   "tour.language.body":
     "언어에 맞게 코드 색이 달라져요. 자동으로 찾아 주고, 여기서 직접 바꿀 수도 있어요.",
   "tour.menu.title": "더 보기",
   "tour.menu.body":
-    "다운로드, 저장, 발표, 설정이 이 메뉴에 있어요. 이 안내는 설정에서 다시 볼 수 있어요.",
+    "다운로드, 저장, 발표, 설정이 이 메뉴에 있어요. 설정에서는 다른 사람 커서를 어떻게 보일지 고를 수 있어요. 사용 안내와 이 안내도 여기서 다시 볼 수 있어요.",
   "tour.step": "{current} / {total}",
   "tour.announce": "{total}단계 중 {current}단계: {title}. {body}",
   "tour.nextAction": "다음",

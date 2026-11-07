@@ -8,13 +8,24 @@ export const MONGO_URL = process.env.E2E_MONGO_URL ?? "mongodb://localhost:27017
 export const DATABASE_URL = process.env.E2E_DATABASE_URL;
 export const VALKEY_URL = process.env.E2E_VALKEY_URL ?? "redis://localhost:6379/5";
 
+/** The first-run tour has been seen. Any version at or above the app's counts as seen. */
+const TOUR_SEEN = { name: "gachipad.tour", value: "9999" };
+/** The one-time "drag files in" tip is gone for good. */
+const DROP_TIP_SEEN = { name: "gachipad.tip.drop", value: "1" };
+
 /**
- * The first-run tour has been seen: a browser profile that starts with this key skips it, so specs
- * about other things never meet the tour. Any version at or above the app's counts as seen.
+ * A browser profile that starts with these keys skips the tour and the file tip, so specs about
+ * other things never meet either of them.
  */
 export const TOUR_SEEN_STORAGE = {
   cookies: [],
-  origins: [{ origin: BASE_URL, localStorage: [{ name: "gachipad.tour", value: "9999" }] }],
+  origins: [{ origin: BASE_URL, localStorage: [TOUR_SEEN, DROP_TIP_SEEN] }],
+};
+
+/** The tour is seen but the file tip is not: the profile the tip's own specs start from. */
+export const TIP_UNSEEN_STORAGE = {
+  cookies: [],
+  origins: [{ origin: BASE_URL, localStorage: [TOUR_SEEN] }],
 };
 
 /** Token of the admin API in the end-to-end stack (the API switches the admin console off without one). */

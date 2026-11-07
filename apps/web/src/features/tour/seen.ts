@@ -1,7 +1,7 @@
 import { createStore, useStore } from "../../lib/store";
 
 /** Raise it when the tour changes enough that people who saw the old one should see it again. */
-export const TOUR_VERSION = 1;
+export const TOUR_VERSION = 2;
 /** localStorage key holding the highest tour version this browser has seen. */
 export const TOUR_STORAGE_KEY = "gachipad.tour";
 

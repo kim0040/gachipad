@@ -91,7 +91,8 @@ export const en = {
   "intro.how.step2.body": "Show the 6-digit code or QR code, or send the share to a person.",
   "intro.how.step3.title": "Edit together",
   "intro.how.step3.time": "From then on",
-  "intro.how.step3.body": "Everyone types at once. Changes merge without conflicts.",
+  "intro.how.step3.body":
+    "Everyone types at once. Changes merge without conflicts. Drag a file onto the page to add it.",
   "intro.how.sub": "Create it, pass on the code, edit together. That's all.",
   "intro.fast.title": "Faster on the same network",
   "intro.fast.sub": "No more copying links into a messenger.",
@@ -122,8 +123,9 @@ export const en = {
     "Edit the same line together and nothing gets overwritten. If the connection drops, your typing is kept and merged when you're back.",
   "intro.features.access.title": "View-only and PIN lock",
   "intro.features.access.body": "Choose who can edit, and approve people before they join.",
-  "intro.features.files.title": "Multiple files",
-  "intro.features.files.body": "Keep several files in one share, or upload a whole folder.",
+  "intro.features.files.title": "Drop files in",
+  "intro.features.files.body":
+    "Keep several files in one share. Drag files, folders or a .zip anywhere onto the page and they are added right away, and a file with the same name is never overwritten.",
   "intro.features.history.title": "History replay",
   "intro.features.history.body": "Replay how the code changed and restore an earlier version.",
   "intro.features.download.title": "Download",
@@ -171,6 +173,13 @@ export const en = {
   "intro.footer.noTracking":
     "No ads, trackers or outside scripts. Everything loads from this server.",
   "intro.footer.licenses": "Open-source licenses",
+  "intro.footer.contribute.title": "Found a bug, or want to contribute?",
+  "intro.footer.contribute.body": "Tell us on GitHub. You are always welcome.",
+  "intro.footer.contribute.contactNote":
+    "GitHub is for the software itself. For questions about this server, use the contact below.",
+  "intro.footer.contribute.reportAction": "Report a bug",
+  "intro.footer.contribute.guideAction": "Contribute",
+  "intro.footer.contribute.repoAction": "GitHub repository",
   "intro.footer.navLabel": "Pages",
 
   // ── Share basics (kept from the first dictionary) ──
@@ -208,6 +217,8 @@ export const en = {
   "editor.top.settingsAction": "Settings",
   "editor.top.shortcutsAction": "Shortcuts",
   "editor.top.commandAction": "Command palette",
+  "editor.top.helpAction": "How to use",
+  "editor.top.uploadAction": "Upload files",
 
   // ── Editor: body ──
   "editor.loading": "Opening the share…",
@@ -1195,13 +1206,23 @@ export const en = {
   "tour.people.title": "Who is here",
   "tour.people.body": "Everyone in the share appears here. Select a person to follow their cursor.",
   "tour.files.title": "Files",
-  "tour.files.body": "Each tab is a file. Add files, or drag them in from your computer.",
+  "tour.files.body":
+    "Each tab is a file. Drag files, folders or a .zip from your computer anywhere onto the window and they are added right away.",
+  "tour.files.touchBody":
+    "Each tab is a file. Use Upload files in the more menu to add files, folders or a .zip.",
+  "tour.files.limitedBody":
+    "Each tab is a file. You cannot add files to this share. Select a tab to open another file.",
+  "tour.dropTip.label": "Tip: adding files",
+  "tour.dropTip.body": "Drag a file like main.py onto the window to add it right away.",
+  "tour.dropTip.touchBody": "Use the upload button to add files, folders or a .zip.",
+  "tour.dropTip.openAction": "Open upload",
+  "tour.dropTip.dismissAction": "Dismiss tip",
   "tour.language.title": "Language",
   "tour.language.body":
     "Highlighting follows the language. It is detected for you, and you can change it here.",
   "tour.menu.title": "More actions",
   "tour.menu.body":
-    "Download, save, present and settings are in this menu. You can replay this tour from Settings.",
+    "Download, save, present and settings are in this menu. In Settings you can choose how other people's cursors are shown. The how-to guide and this tour can be opened again from here.",
   "tour.step": "{current} / {total}",
   "tour.announce": "Step {current} of {total}: {title}. {body}",
   "tour.nextAction": "Next",

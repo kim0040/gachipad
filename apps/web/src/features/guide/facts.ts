@@ -36,6 +36,10 @@ export const FACTS = {
   defaultUploadMB: defaults.maxUploadMB,
   defaultDocMB: defaults.maxDocBytes / MB,
   defaultExpiryHours: defaults.anonymousTtlHours,
+  /** Dropped or uploaded files: bigger than this is skipped (features/editor/import-files.ts). */
+  importFileMB: 5,
+  /** At this many people in one file, the "auto" remote-cursor mode dims carets and hides most names. */
+  cursorCrowd: 6,
 } as const;
 
 /** Editor preferences (lib/prefs.ts). */

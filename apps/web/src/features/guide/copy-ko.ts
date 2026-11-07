@@ -18,6 +18,7 @@ export const guideKo: Record<GuideKey, string> = {
   "guide.how.toc.create": "공유 만들기",
   "guide.how.toc.tell": "들어오는 방법 알리기",
   "guide.how.toc.edit": "같이 고치기",
+  "guide.how.toc.files": "파일 넣는 방법",
   "guide.how.toc.roles": "소유자, 편집자, 보기 전용",
   "guide.how.toc.control": "누가 들어올지 정하기",
   "guide.how.toc.offline": "연결이 끊겼을 때",
@@ -54,7 +55,7 @@ export const guideKo: Record<GuideKey, string> = {
     "모두가 같은 파일에 동시에 입력해요. 변경 내용이 합쳐지므로 같은 줄을 함께 고쳐도 서로 덮어쓰지 않아요.",
   "guide.how.edit.cursors.title": "이름이 붙은 커서",
   "guide.how.edit.cursors.body":
-    "사람마다 색깔 있는 커서와 이름표가 있어서 누가 어디를 고치는지 볼 수 있어요.",
+    "사람마다 색깔 있는 커서와 이름표가 있어서 누가 어디를 고치는지 볼 수 있어요. 사람이 많아 어수선하면 설정의 다른 사람 커서에서 보이는 방식을 바꿀 수 있어요.",
   "guide.how.edit.follow.title": "따라가기",
   "guide.how.edit.follow.body":
     "상단 바에서 사람을 고르고 따라가기를 누르세요. 멈출 때까지 그 사람의 화면 위치를 따라가요.",
@@ -67,6 +68,30 @@ export const guideKo: Record<GuideKey, string> = {
   "guide.how.edit.lock.title": "편집 잠금",
   "guide.how.edit.lock.body":
     "소유자는 편집을 잠가서 자기만 코드를 고치게 할 수 있어요. 설명하는 동안 쓰기 좋아요.",
+
+  "guide.how.files.title": "파일 넣는 방법",
+  "guide.how.files.lead":
+    "내 컴퓨터의 파일을 공유에 넣는 방법은 네 가지예요. 소유자는 언제나 쓸 수 있고, 편집자는 소유자가 공유 창에서 참여자의 파일 추가를 허용했을 때 쓸 수 있어요.",
+  "guide.how.files.drag.title": "화면에 끌어다 놓기",
+  "guide.how.files.drag.body":
+    "파일, 폴더, .zip을 공유 화면 어디에나 끌어다 놓으세요. 화면 전체에 안내가 뜨고, 놓으면 바로 추가돼요. 첫 화면에 놓으면 그 파일로 새 공유가 만들어져요.",
+  "guide.how.files.button.title": "올리기 버튼",
+  "guide.how.files.button.body":
+    "휴대폰처럼 끌어다 놓기 어려운 기기에서는 더 보기 메뉴의 파일 올리기를 쓰세요. 파일이나 폴더를 골라 올릴 수 있어요.",
+  "guide.how.files.paste.title": "복사해서 붙여넣기",
+  "guide.how.files.paste.body":
+    "파일 탐색기나 Finder에서 복사한 파일은 편집기에 붙여넣어도 추가돼요.",
+  "guide.how.files.zip.title": ".zip과 폴더",
+  "guide.how.files.zip.body":
+    ".zip은 풀어서 폴더 구조 그대로 넣고, 폴더는 안의 파일을 모두 넣어요. .git, node_modules, __pycache__ 같은 폴더는 가져오지 않아요.",
+  "guide.how.files.duplicate.title": "같은 이름의 파일이 있으면",
+  "guide.how.files.duplicate.body":
+    "이름도 내용도 같으면 새로 만들지 않고 있는 파일을 열어 줘요. 이름은 같은데 내용이 다르면 main (2).py처럼 번호를 붙여 따로 추가하고, 있던 파일은 건드리지 않아요.",
+  "guide.how.files.skipped.title": "건너뛰는 파일",
+  "guide.how.files.skipped.body":
+    "텍스트가 아닌 파일, {perFile}MB를 넘는 파일, 한 번에 {max}개를 넘는 파일, 공유의 크기 제한({doc}MB)을 넘는 파일, 읽을 수 없는 파일은 건너뛰어요. 어떤 파일이 왜 빠졌는지는 알림에 이름과 함께 나와요.",
+  "guide.how.files.viewer":
+    "보기 전용으로 들어온 사람은 파일을 추가할 수 없고, 파일을 놓으면 왜 안 되는지 알려 줘요.",
 
   "guide.how.roles.title": "소유자, 편집자, 보기 전용",
   "guide.how.roles.lead": "공유에 들어온 사람은 세 가지 역할 중 하나를 가져요.",
@@ -127,6 +152,7 @@ export const guideKo: Record<GuideKey, string> = {
   "guide.features.toc.download": "다운로드",
   "guide.features.toc.shortcuts": "단축키",
   "guide.features.toc.settings": "편집기 설정",
+  "guide.features.toc.cursors": "다른 사람 커서",
   "guide.features.toc.lab": "실습실 모드",
   "guide.features.toc.templates": "템플릿",
   "guide.features.toc.more": "그 밖의 기능",
@@ -154,7 +180,8 @@ export const guideKo: Record<GuideKey, string> = {
   "guide.features.files.body1":
     "공유 하나에 파일을 최대 {max}개까지 둘 수 있어요. src/index.ts처럼 파일 이름에 슬래시를 넣으면 폴더가 돼요.",
   "guide.features.files.body2":
-    "파일, 폴더, .zip을 화면에 끌어다 놓으면 추가돼요. .DS_Store, Thumbs.db, __MACOSX 같은 운영체제 부산물은 건너뛰고, Windows 경로와 줄바꿈은 알아서 정리해요.",
+    "파일, 폴더, .zip을 화면 어디에나 끌어다 놓거나 더 보기 메뉴의 파일 올리기로 추가해요. .DS_Store, Thumbs.db, __MACOSX 같은 운영체제 부산물은 건너뛰고, Windows 경로와 줄바꿈은 알아서 정리해요.",
+  "guide.features.files.more": "넣는 방법과 건너뛰는 파일 자세히 보기",
   "guide.features.files.body3":
     "크기 제한은 관리자가 정해요. 기본값은 업로드 한 번에 {upload}MB, 공유 하나의 글에 {doc}MB예요.",
 
@@ -216,6 +243,21 @@ export const guideKo: Record<GuideKey, string> = {
   "guide.features.settings.language.title": "화면 언어",
   "guide.features.settings.language.body":
     "한국어와 English 중에서 골라요. 어느 페이지에서든 바꿀 수 있고, 선택은 이 브라우저에 남아요.",
+
+  "guide.features.cursors.title": "다른 사람 커서",
+  "guide.features.cursors.lead":
+    "사람이 많아도 화면이 어수선하지 않게, 다른 사람의 커서를 보이는 방식을 고를 수 있어요. 설정의 다른 사람 커서에서 바꿔요.",
+  "guide.features.cursors.auto.title": "자동 (기본)",
+  "guide.features.cursors.auto.body":
+    "한 파일에 {crowd}명 이상이 있으면 커서가 흐려지고, 내 커서 가까이에서 움직이는 사람의 이름만 보여요. 발표하는 사람, 내가 따라가는 사람, 소유자는 이름이 계속 보여요.",
+  "guide.features.cursors.moving.title": "움직일 때만",
+  "guide.features.cursors.moving.body": "커서가 움직이는 동안에만 이름을 보여요.",
+  "guide.features.cursors.always.title": "항상",
+  "guide.features.cursors.always.body": "모든 사람의 이름을 늘 보여요.",
+  "guide.features.cursors.carets.title": "커서만",
+  "guide.features.cursors.carets.body": "이름 없이 색깔 있는 커서만 보여요.",
+  "guide.features.cursors.hover":
+    "어느 방식이든 커서에 마우스를 올리면 이름이 보이고, 목록에서 사람에게 올리면 그 사람의 커서가 강조돼요.",
 
   "guide.features.lab.title": "실습실 모드",
   "guide.features.lab.lead":
@@ -307,7 +349,7 @@ export const guideKo: Record<GuideKey, string> = {
 
   "guide.network.size.title": "큰 파일 업로드",
   "guide.network.size.body1":
-    "파일, 폴더, .zip을 화면에 끌어다 놓으세요. 인터넷으로 나가지 않고 네트워크 안의 서버로 가서, 업로드 시간은 네트워크가 허락하는 만큼만 걸려요.",
+    "파일, 폴더, .zip을 화면에 끌어다 놓거나 업로드 버튼으로 고르세요. 인터넷으로 나가지 않고 네트워크 안의 서버로 가서, 업로드 시간은 네트워크가 허락하는 만큼만 걸려요.",
   "guide.network.size.body2":
     "업로드 한 번의 제한은 관리자가 정하고 기본값은 {upload}MB예요. 공유 하나의 글 크기는 기본값이 5MB예요.",
   "guide.network.size.body3":
@@ -442,7 +484,16 @@ export const guideKo: Record<GuideKey, string> = {
     "제한은 관리자가 정해요. 기본값은 공유 하나의 글 5MB, 업로드 한 번 {upload}MB예요.",
   "guide.faq.folder.q": "폴더를 올릴 수 있나요?",
   "guide.faq.folder.a":
-    "네. 파일, 폴더, .zip을 화면에 끌어다 놓으세요. 공유 하나에 파일을 최대 {max}개까지 둘 수 있어요.",
+    "네. 파일, 폴더, .zip을 화면 어디에나 끌어다 놓거나 더 보기 메뉴의 파일 올리기를 쓰세요. 공유 하나에 파일을 최대 {max}개까지 둘 수 있어요.",
+  "guide.faq.duplicate.q": "같은 이름 파일을 올리면?",
+  "guide.faq.duplicate.a":
+    "이름과 내용이 모두 같으면 있는 파일을 열어 줘요. 이름은 같고 내용이 다르면 main (2).py처럼 번호를 붙여 따로 추가하고, 있던 파일은 덮어쓰지 않아요.",
+  "guide.faq.uploadFails.q": "파일이 안 올라가요",
+  "guide.faq.uploadFails.a":
+    "먼저 파일을 추가할 수 있는 사람인지 확인하세요. 보기 전용이거나, 편집자인데 소유자가 파일 추가를 허용하지 않았다면 추가할 수 없어요. 그다음 알림에 나온 이유를 보세요. 텍스트가 아닌 파일, {perFile}MB를 넘는 파일, 한 번에 {max}개를 넘는 파일, 크기 제한을 넘는 파일은 건너뛰어요. 끌어다 놓기가 안 되면 더 보기 메뉴의 파일 올리기를 써 보세요.",
+  "guide.faq.cursors.q": "다른 사람 커서가 거슬려요",
+  "guide.faq.cursors.a":
+    "설정의 다른 사람 커서에서 보이는 방식을 바꿀 수 있어요. 이름 없이 커서만 보거나, 움직일 때만 이름을 보게 할 수 있어요. 한 파일에 여럿이 있으면 기본값인 자동이 알아서 줄여 줘요.",
   "guide.faq.history.q": "이력은 누가 볼 수 있나요?",
   "guide.faq.history.a":
     "소유자만 볼 수 있어요. 이력에 있는 지운 내용은 다른 사람에게 전달되지 않고, 오래된 버전은 보관 기간이 지나면 지워져요.",

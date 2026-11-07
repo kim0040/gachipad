@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useT } from "../../../lib/i18n";
 import { LICENSES_URL } from "../../../lib/licenses";
+import { REPO_CONTRIBUTING_URL, REPO_ISSUE_URL, REPO_URL } from "../../../lib/repository";
 import { NameCells } from "../art";
-import { ArrowRightIcon } from "../icons";
+import { ArrowRightIcon, ExternalIcon } from "../icons";
 import { GUIDE_PAGES } from "../nav";
 import { reveal } from "../reveal";
 import { LocaleSwitch, ThemeSwitch } from "./Header";
@@ -11,6 +12,12 @@ export interface FooterProps {
   version: string;
   contact?: string;
 }
+
+const CONTRIBUTE_LINKS = [
+  { key: "report", href: REPO_ISSUE_URL },
+  { key: "guide", href: REPO_CONTRIBUTING_URL },
+  { key: "repo", href: REPO_URL },
+] as const;
 
 export function Footer({ version, contact }: FooterProps) {
   const t = useT();
@@ -37,6 +44,41 @@ export function Footer({ version, contact }: FooterProps) {
           <NameCells />
         </div>
         <p className="ix-sr">{t("app.name")}</p>
+        <section
+          className="ix-contribute"
+          aria-labelledby="ix-contribute-title"
+          data-testid="contribute"
+          {...reveal(30)}
+        >
+          <div className="ix-contribute-text">
+            <h2 className="ix-contribute-title" id="ix-contribute-title">
+              {t("intro.footer.contribute.title")}
+            </h2>
+            <p>{t("intro.footer.contribute.body")}</p>
+            {contact ? (
+              <p className="ix-contribute-note" data-testid="contribute-note">
+                {t("intro.footer.contribute.contactNote")}
+              </p>
+            ) : null}
+          </div>
+          <ul className="ix-contribute-links">
+            {CONTRIBUTE_LINKS.map(({ key, href }) => (
+              <li key={key}>
+                <a
+                  className="ix-btn"
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`contribute-${key}`}
+                >
+                  {t(`intro.footer.contribute.${key}Action`)}
+                  <span className="ix-sr">{t("a11y.opensInNewTab")}</span>
+                  <ExternalIcon />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
         <div className="ix-footer-grid">
           <div className="ix-footer-lead" {...reveal(60)}>
             <p className="ix-footer-tagline">{t("app.tagline")}</p>

@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   Bookmark,
   BookmarkCheck,
+  CircleHelp,
   Command as CommandIcon,
   Copy,
   Download,
@@ -30,6 +31,8 @@ import {
   Presentation,
   Settings,
   Share2,
+  Sparkles,
+  Upload,
   UserRound,
   Wand2,
 } from "lucide-react";
@@ -39,6 +42,7 @@ import { setTitle } from "../../lib/collab/model";
 import { useT } from "../../lib/i18n";
 import { openPalette, openShortcuts } from "../../lib/overlays";
 import { shortcutKeys } from "../../lib/shortcuts";
+import { requestTour } from "../tour/seen";
 import { labelColorFor } from "./cm/remote-cursors";
 import { useDocumentPermissions, useEditor } from "./context";
 import { canFormat } from "./format-code";
@@ -53,6 +57,11 @@ export interface TopBarActions {
   fork: () => void;
 }
 
+/** The how-to guide's file section, in a new tab so the share stays open. */
+const openGuide = () => {
+  window.open("/guide/how#files", "_blank", "noopener,noreferrer");
+};
+
 export function TopBar({ actions }: { actions: TopBarActions }) {
   const t = useT();
   const ctx = useEditor();
@@ -60,6 +69,7 @@ export function TopBar({ actions }: { actions: TopBarActions }) {
   const openComments = comments.filter((comment) => !comment.resolved).length;
   const canEdit = !ctx.readOnly;
   const formattable = canEdit && canFormat(ctx.activeFile.language);
+  const canUpload = useDocumentPermissions().files;
 
   return (
     <header className="flex min-h-12 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2 py-1.5 sm:gap-2 sm:px-3">
@@ -181,6 +191,15 @@ export function TopBar({ actions }: { actions: TopBarActions }) {
                 {t("editor.download.zipAction")}
               </DropdownMenuItem>
             ) : null}
+            {canUpload ? (
+              <DropdownMenuItem
+                icon={<Upload />}
+                onSelect={() => ctx.openPanel("upload")}
+                data-testid="menu-upload"
+              >
+                {t("editor.top.uploadAction")}
+              </DropdownMenuItem>
+            ) : null}
             {formattable ? (
               <DropdownMenuItem
                 icon={<Wand2 />}
@@ -234,6 +253,14 @@ export function TopBar({ actions }: { actions: TopBarActions }) {
               onSelect={openShortcuts}
             >
               {t("editor.top.shortcutsAction")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem icon={<CircleHelp />} onSelect={openGuide} data-testid="menu-help">
+              {t("editor.top.helpAction")}
+              <span className="sr-only">{t("a11y.opensInNewTab")}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem icon={<Sparkles />} onSelect={requestTour} data-testid="menu-tour">
+              {t("tour.replay.action")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

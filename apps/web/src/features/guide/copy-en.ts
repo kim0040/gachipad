@@ -22,6 +22,7 @@ export const guideEn = {
   "guide.how.toc.create": "Create a share",
   "guide.how.toc.tell": "Tell people how to join",
   "guide.how.toc.edit": "Edit together",
+  "guide.how.toc.files": "Adding files",
   "guide.how.toc.roles": "Owners, editors and viewers",
   "guide.how.toc.control": "Control who joins",
   "guide.how.toc.offline": "When the connection drops",
@@ -58,7 +59,7 @@ export const guideEn = {
     "Everyone types in the same file at once. Edits are merged, so two people changing the same line don't overwrite each other.",
   "guide.how.edit.cursors.title": "Cursors with names",
   "guide.how.edit.cursors.body":
-    "Each person has a colored cursor and a name tag, so you can see who is where.",
+    "Each person has a colored cursor and a name tag, so you can see who is where. When a crowd makes it busy, change how they are shown in Settings under Other people's cursors.",
   "guide.how.edit.follow.title": "Follow someone",
   "guide.how.edit.follow.body":
     "Select a person in the top bar and choose Follow. Your view scrolls along with theirs until you stop.",
@@ -71,6 +72,30 @@ export const guideEn = {
   "guide.how.edit.lock.title": "Lock editing",
   "guide.how.edit.lock.body":
     "The owner can lock editing so that only they can change the code, for example while explaining something.",
+
+  "guide.how.files.title": "Adding files",
+  "guide.how.files.lead":
+    "There are four ways to bring files from your computer into a share. Owners can always use them, and editors can once the owner allows participants to add files in the Share window.",
+  "guide.how.files.drag.title": "Drag onto the window",
+  "guide.how.files.drag.body":
+    "Drag files, folders or a .zip anywhere onto the share. An overlay covers the window, and dropping adds them right away. Dropped on the home page, they start a new share.",
+  "guide.how.files.button.title": "The upload button",
+  "guide.how.files.button.body":
+    "Where dragging is hard, such as on a phone, use Upload files in the more menu. You can pick files or a folder.",
+  "guide.how.files.paste.title": "Copy and paste",
+  "guide.how.files.paste.body":
+    "Files copied in your file manager or Finder are added when you paste them into the editor.",
+  "guide.how.files.zip.title": ".zip files and folders",
+  "guide.how.files.zip.body":
+    "A .zip is unpacked with its folders kept, and a folder brings every file inside it. Folders such as .git, node_modules and __pycache__ are left out.",
+  "guide.how.files.duplicate.title": "When the name already exists",
+  "guide.how.files.duplicate.body":
+    "With the same name and the same content, nothing new is made and the existing file opens. With the same name and different content, the new one is added as main (2).py and the existing file is not touched.",
+  "guide.how.files.skipped.title": "What is skipped",
+  "guide.how.files.skipped.body":
+    "Files that are not text, files over {perFile} MB, more than {max} files at once, files that go over the share's size limit ({doc} MB) and files that cannot be read are skipped. A notice names each skipped file and says why.",
+  "guide.how.files.viewer":
+    "People who joined as viewers cannot add files, and dropping one tells them why.",
 
   "guide.how.roles.title": "Owners, editors and viewers",
   "guide.how.roles.lead": "Everyone in a share has one of three roles.",
@@ -132,6 +157,7 @@ export const guideEn = {
   "guide.features.toc.download": "Download",
   "guide.features.toc.shortcuts": "Keyboard shortcuts",
   "guide.features.toc.settings": "Editor settings",
+  "guide.features.toc.cursors": "Other people's cursors",
   "guide.features.toc.lab": "Lab mode",
   "guide.features.toc.templates": "Templates",
   "guide.features.toc.more": "Also included",
@@ -159,7 +185,8 @@ export const guideEn = {
   "guide.features.files.body1":
     "A share holds up to {max} files. Put slashes in a file name to make folders, such as src/index.ts.",
   "guide.features.files.body2":
-    "Drop files, a folder or a .zip onto the page to add them. System leftovers such as .DS_Store, Thumbs.db and __MACOSX are skipped, and Windows paths and line endings are tidied.",
+    "Drop files, a folder or a .zip anywhere onto the page, or use Upload files in the more menu. System leftovers such as .DS_Store, Thumbs.db and __MACOSX are skipped, and Windows paths and line endings are tidied.",
+  "guide.features.files.more": "More on adding files and what is skipped",
   "guide.features.files.body3":
     "The administrator sets the size limits. By default one upload can be {upload} MB and the text of one share {doc} MB.",
 
@@ -221,6 +248,21 @@ export const guideEn = {
   "guide.features.settings.language.title": "Display language",
   "guide.features.settings.language.body":
     "Korean or English. Switch it on any page; the choice is kept in this browser.",
+
+  "guide.features.cursors.title": "Other people's cursors",
+  "guide.features.cursors.lead":
+    "Choose how other people's cursors are shown, so a crowd does not clutter the page. Change it in Settings under Other people's cursors.",
+  "guide.features.cursors.auto.title": "Auto (default)",
+  "guide.features.cursors.auto.body":
+    "With {crowd} or more people in a file, cursors dim and names appear only for people moving near your cursor. The presenter, the person you follow and the owner keep their names.",
+  "guide.features.cursors.moving.title": "While moving",
+  "guide.features.cursors.moving.body": "A name shows only while that cursor is moving.",
+  "guide.features.cursors.always.title": "Always",
+  "guide.features.cursors.always.body": "Everyone's name is shown all the time.",
+  "guide.features.cursors.carets.title": "Cursors only",
+  "guide.features.cursors.carets.body": "Colored cursors without names.",
+  "guide.features.cursors.hover":
+    "In every mode, hovering a cursor shows its name, and hovering a person in the list highlights their cursor.",
 
   "guide.features.lab.title": "Lab mode",
   "guide.features.lab.lead":
@@ -313,7 +355,7 @@ export const guideEn = {
 
   "guide.network.size.title": "Large uploads",
   "guide.network.size.body1":
-    "Drop files, a folder or a .zip onto the page. They go to the server on your network and not out to the internet, so an upload takes as long as your network needs.",
+    "Drop files, a folder or a .zip onto the page, or pick them with the upload button. They go to the server on your network and not out to the internet, so an upload takes as long as your network needs.",
   "guide.network.size.body2":
     "The administrator sets the limit for one upload, {upload} MB by default, and the size of the text in one share, 5 MB by default.",
   "guide.network.size.body3":
@@ -448,7 +490,16 @@ export const guideEn = {
     "The administrator sets the limits. By default a share's text can be 5 MB and one upload {upload} MB.",
   "guide.faq.folder.q": "Can I upload a folder?",
   "guide.faq.folder.a":
-    "Yes. Drop files, a folder or a .zip onto the page. A share holds up to {max} files.",
+    "Yes. Drop files, a folder or a .zip anywhere onto the page, or use Upload files in the more menu. A share holds up to {max} files.",
+  "guide.faq.duplicate.q": "What if a file with the same name is uploaded?",
+  "guide.faq.duplicate.a":
+    "If the name and the content are both the same, the existing file opens. If only the name is the same, the new one is added as main (2).py and the existing file is never overwritten.",
+  "guide.faq.uploadFails.q": "My files won't upload",
+  "guide.faq.uploadFails.a":
+    "First check that you may add files: viewers cannot, and neither can editors unless the owner allowed it. Then read the notice for the reason. Files that are not text, files over {perFile} MB, more than {max} files at once and files over the size limit are skipped. If dragging does not work, try Upload files in the more menu.",
+  "guide.faq.cursors.q": "Other people's cursors are distracting",
+  "guide.faq.cursors.a":
+    "In Settings, change Other people's cursors. You can show cursors without names, or names only while someone is moving. With many people in one file, the default Auto already quiets them for you.",
   "guide.faq.history.q": "Who can see the history?",
   "guide.faq.history.a":
     "Only the owner. Deleted text in it is never sent to other people, and old versions are removed after the retention period.",

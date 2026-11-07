@@ -14,6 +14,7 @@ const SECTIONS = [
   "download",
   "shortcuts",
   "settings",
+  "cursors",
   "lab",
   "templates",
   "more",
@@ -49,6 +50,9 @@ export function FeaturesPage() {
         <Split Art={FilesArt} flip>
           <P>{t("guide.features.files.body1", { max: FACTS.files })}</P>
           <P>{t("guide.features.files.body2")}</P>
+          <Link to="/guide/how" hash="files" className="ix-more">
+            {t("guide.features.files.more")}
+          </Link>
           <P>
             {t("guide.features.files.body3", {
               upload: settings.uploadMB,
@@ -134,6 +138,20 @@ export function FeaturesPage() {
             },
           ]}
         />
+      </GSection>
+
+      <GSection
+        id="cursors"
+        title={t("guide.features.cursors.title")}
+        lead={t("guide.features.cursors.lead")}
+      >
+        <Cards
+          items={(["auto", "moving", "always", "carets"] as const).map((key) => ({
+            title: t(`guide.features.cursors.${key}.title`),
+            body: t(`guide.features.cursors.${key}.body`, { crowd: FACTS.cursorCrowd }),
+          }))}
+        />
+        <P>{t("guide.features.cursors.hover")}</P>
       </GSection>
 
       <GSection id="lab" title={t("guide.features.lab.title")} lead={t("guide.features.lab.lead")}>

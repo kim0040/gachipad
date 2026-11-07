@@ -42,6 +42,7 @@ import { getPrefs } from "../../lib/prefs";
 import { shortcutKeys } from "../../lib/shortcuts";
 import { useStore } from "../../lib/store";
 import { useWindowShortcuts } from "../../lib/use-shortcuts";
+import { DropTip } from "../tour/DropTip";
 import { TourMount } from "../tour/TourMount";
 import { copyAll, downloadFile, downloadZip, looksLikeSecret } from "./actions";
 import { EditorBanners } from "./banners";
@@ -574,6 +575,7 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
                   onDropFiles={onDropFiles}
                 />
                 <AloneHint />
+                <DropTip />
               </div>
             </>
           )}
