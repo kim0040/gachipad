@@ -188,7 +188,7 @@ export const guideEn = {
     "Drop files, a folder or a .zip anywhere onto the page, or use Upload files in the more menu. System leftovers such as .DS_Store, Thumbs.db and __MACOSX are skipped, and Windows paths and line endings are tidied.",
   "guide.features.files.more": "More on adding files and what is skipped",
   "guide.features.files.body3":
-    "The administrator of each server sets the size limits. Here one upload can be {upload} MB and the text of one share {doc} MB.",
+    "The administrator of each server sets the size limits. Here, one upload can be up to {upload} MB and the text of one share up to {doc} MB.",
 
   "guide.features.history.title": "History and restore",
   "guide.features.history.body1":

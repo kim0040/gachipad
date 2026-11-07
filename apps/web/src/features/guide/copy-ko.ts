@@ -183,7 +183,7 @@ export const guideKo: Record<GuideKey, string> = {
     "파일, 폴더, .zip을 화면 어디에나 끌어다 놓거나 더 보기 메뉴의 파일 올리기로 추가해요. .DS_Store, Thumbs.db, __MACOSX 같은 운영체제 부산물은 건너뛰고, Windows 경로와 줄바꿈은 알아서 정리해요.",
   "guide.features.files.more": "넣는 방법과 건너뛰는 파일 자세히 보기",
   "guide.features.files.body3":
-    "크기 제한은 서버마다 관리자가 정해요. 이 서버에서는 업로드 한 번에 {upload}MB, 공유 하나의 글에 {doc}MB까지예요.",
+    "크기 제한은 서버마다 관리자가 정해요. 이 서버에서는 업로드 한 번에 {upload}MB, 공유 하나의 글은 {doc}MB까지예요.",
 
   "guide.features.history.title": "이력과 복원",
   "guide.features.history.body1":
