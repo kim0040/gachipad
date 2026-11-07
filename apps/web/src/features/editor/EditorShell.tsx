@@ -44,6 +44,7 @@ import { useStore } from "../../lib/store";
 import { useWindowShortcuts } from "../../lib/use-shortcuts";
 import { FileDropOverlay } from "../app/FileDropOverlay";
 import { useFileDrop } from "../app/file-drop";
+import { DropTip } from "../tour/DropTip";
 import { TourMount } from "../tour/TourMount";
 import { copyAll, downloadFile, downloadZip, looksLikeSecret } from "./actions";
 import { EditorBanners } from "./banners";
@@ -584,6 +585,7 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
                   emptyHint={emptyHint}
                 />
                 <AloneHint />
+                <DropTip />
               </div>
             </>
           )}

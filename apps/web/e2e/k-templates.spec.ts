@@ -153,6 +153,10 @@ test("admin adds a template and sets the contact; both reach the picker and the 
     // The picker lists it after the built-in ones, in its own group.
     await visitor.page.goto("/");
     await expect(visitor.page.locator("footer")).toContainText("it-help@example.org");
+    // With a contact set, GitHub is said to be for the software and the contact for this server.
+    await expect(visitor.page.getByTestId("contribute-note")).toContainText(
+      "GitHub is for the software itself",
+    );
     await visitor.page.getByTestId("new-from-template").click();
     const picker = visitor.page.getByRole("dialog", { name: "Start from a template" });
     await picker.getByTestId("template-search").fill("service skeleton");

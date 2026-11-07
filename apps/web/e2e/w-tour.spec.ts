@@ -1,13 +1,17 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { BASE_URL } from "./env";
+import { BASE_URL, TIP_UNSEEN_STORAGE } from "./env";
 import {
   closeAll,
   createShare,
+  joinByLink,
   newUser,
   openShareDialog,
   type User,
   waitForEditor,
 } from "./helpers";
+
+/** The version the app's tour is at; people who stored an older one see the tour once more. */
+const TOUR_VERSION = "2";
 
 /** After the editor is up, the tour waits for a quiet moment (700ms) before it comes in. */
 const QUIET_MS = 1500;
@@ -22,6 +26,7 @@ async function firstTimer(
     colorScheme?: "dark" | "light";
     forcedColors?: "active" | "none";
     contrast?: "more" | "no-preference";
+    storageState?: typeof TIP_UNSEEN_STORAGE;
   } = {},
 ): Promise<User> {
   const name = `${label}${Date.now().toString(36).slice(-4)}`;
@@ -131,7 +136,7 @@ test("a first visit gets the tour, keyboard only, once; Settings replays it", as
     await expect(page.getByTestId("tour-skip")).toHaveCount(0);
     await page.keyboard.press("Enter");
     await expect(tourDialog(page)).toBeHidden();
-    expect(await storedVersion(page)).toBe("1");
+    expect(await storedVersion(page)).toBe(TOUR_VERSION);
 
     // Seen: a reload does not bring it back.
     await page.reload();
@@ -149,7 +154,7 @@ test("a first visit gets the tour, keyboard only, once; Settings replays it", as
     // Escape closes it, and counts as seen.
     await page.keyboard.press("Escape");
     await expect(tourDialog(page)).toBeHidden();
-    expect(await storedVersion(page)).toBe("1");
+    expect(await storedVersion(page)).toBe(TOUR_VERSION);
   } finally {
     await closeAll(user);
   }
@@ -165,7 +170,7 @@ test("Skip ends the tour and it stays gone on the next visit", async ({ browser 
     await page.getByTestId("tour-next").click();
     await page.getByTestId("tour-skip").click();
     await expect(tourDialog(page)).toBeHidden();
-    expect(await storedVersion(page)).toBe("1");
+    expect(await storedVersion(page)).toBe(TOUR_VERSION);
     // Another share in the same browser: still no tour.
     await createShare(page);
     await page.waitForTimeout(QUIET_MS);
@@ -437,5 +442,424 @@ test("reduced motion: the tour moves nothing, motion allowed: it glides on trans
       .toBe(0);
   } finally {
     await closeAll(motion, reduced);
+  }
+});
+
+// ── The files step and the menu step teach what the new features do ──
+
+/** Moves from step 1 to the step with this title, by keyboard. */
+async function walkTo(page: Page, title: string): Promise<void> {
+  for (let guard = 0; guard < 8; guard++) {
+    const heading = (await page.getByRole("dialog").getByRole("heading").textContent()) ?? "";
+    if (heading === title) return;
+    await page.keyboard.press("Enter");
+  }
+  throw new Error(`no tour step titled ${title}`);
+}
+
+test("the files step teaches dragging a file in, with a drawing; the menu step names Settings", async ({
+  browser,
+}) => {
+  const user = await firstTimer(browser, "Drag");
+  const { page } = user;
+  try {
+    await createShare(page);
+    await answerDeviceQuestion(page);
+    await expect(tourDialog(page)).toBeVisible();
+
+    await walkTo(page, "Files");
+    await expect(tourDialog(page)).toContainText("Drag files, folders or a .zip");
+    const drawing = page.getByTestId("tour-illustration");
+    await expect(drawing).toBeVisible();
+    // Decorative: hidden from assistive technology, and inside the popover.
+    await expect(drawing).toHaveAttribute("aria-hidden", "true");
+    const inside = await page.evaluate(() => {
+      const pop = document.querySelector('[data-testid="tour"]')?.getBoundingClientRect();
+      const art = document
+        .querySelector('[data-testid="tour-illustration"]')
+        ?.getBoundingClientRect();
+      return Boolean(
+        pop && art && art.left >= pop.left && art.right <= pop.right && art.bottom <= pop.bottom,
+      );
+    });
+    expect(inside).toBe(true);
+    // Other steps carry no drawing.
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("tour-illustration")).toHaveCount(0);
+
+    await walkTo(page, "More actions");
+    await expect(tourDialog(page)).toContainText("Settings");
+    await expect(tourDialog(page)).toContainText("cursors");
+    expect(await storedVersion(page)).toBeNull();
+  } finally {
+    await closeAll(user);
+  }
+});
+
+test("a viewer's files step does not promise adding and has no drawing", async ({ browser }) => {
+  const owner = await newUser(browser, "Owner");
+  const viewer = await firstTimer(browser, "Look");
+  try {
+    const id = await createShare(owner.page);
+    const dialog = await openShareDialog(owner.page, "Access");
+    const patched = owner.page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/shares/${id}`) && response.request().method() === "PATCH",
+    );
+    await dialog.getByTestId("access-view").click();
+    await patched;
+    await dialog.getByRole("tab", { name: "Code and QR" }).click();
+    const viewUrl = await dialog.getByTestId("share-link").inputValue();
+
+    await viewer.page.goto(new URL(viewUrl).pathname);
+    await waitForEditor(viewer.page);
+    await answerDeviceQuestion(viewer.page);
+    await expect(tourDialog(viewer.page)).toBeVisible();
+    await walkTo(viewer.page, "Files");
+    await expect(tourDialog(viewer.page)).toContainText("You cannot add files");
+    await expect(tourDialog(viewer.page)).not.toContainText(/drag/i);
+    await expect(viewer.page.getByTestId("tour-illustration")).toHaveCount(0);
+  } finally {
+    await closeAll(owner, viewer);
+  }
+});
+
+test("someone who saw the first version of the tour sees the new one once", async ({ browser }) => {
+  const returning = await firstTimer(browser, "Old", {
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: BASE_URL,
+          localStorage: [{ name: "gachipad.tour", value: "1" }],
+        },
+      ],
+    },
+  });
+  const { page } = returning;
+  try {
+    await createShare(page);
+    await answerDeviceQuestion(page);
+    await expect(tourDialog(page)).toBeVisible();
+    await page.getByTestId("tour-skip").click();
+    await expect(tourDialog(page)).toBeHidden();
+    expect(await storedVersion(page)).toBe(TOUR_VERSION);
+    await page.reload();
+    await waitForEditor(page);
+    await page.waitForTimeout(QUIET_MS);
+    await expect(tourDialog(page)).toBeHidden();
+  } finally {
+    await closeAll(returning);
+  }
+});
+
+test("the drawing in the files step moves only when motion is welcome, at 320px too", async ({
+  browser,
+}) => {
+  const motion = await firstTimer(browser, "Move", {
+    reducedMotion: "no-preference",
+    viewport: { width: 320, height: 568 },
+  });
+  const still = await firstTimer(browser, "Rest", { reducedMotion: "reduce" });
+  try {
+    for (const user of [motion, still]) {
+      await createShare(user.page);
+      await answerDeviceQuestion(user.page);
+      await expect(tourDialog(user.page)).toBeVisible();
+      await walkTo(user.page, "Files");
+      await expect(user.page.getByTestId("tour-illustration")).toBeVisible();
+    }
+    const file = (page: Page) =>
+      page.evaluate(() => {
+        const node = document.querySelector(".tour-drop-file") as Element;
+        const style = getComputedStyle(node);
+        return { animation: style.animationName, opacity: Number(style.opacity) };
+      });
+    expect((await file(motion.page)).animation).toBe("tour-drop-file");
+    const rest = await file(still.page);
+    expect(rest.animation).toBe("none");
+    // At rest the picture is finished: the file is inside the window.
+    expect(rest.opacity).toBe(1);
+
+    // 320px: the popover, the drawing and the page all fit.
+    await settle(motion.page);
+    const fit = await motion.page.evaluate(() => {
+      const pop = document.querySelector('[data-testid="tour"]')?.getBoundingClientRect();
+      const art = document
+        .querySelector('[data-testid="tour-illustration"]')
+        ?.getBoundingClientRect();
+      return {
+        scroll: document.documentElement.scrollWidth <= innerWidth,
+        art: Boolean(pop && art && art.left >= pop.left && art.right <= pop.right),
+        pop: Boolean(pop && pop.left >= 0 && pop.right <= innerWidth && pop.bottom <= innerHeight),
+      };
+    });
+    expect(fit).toEqual({ scroll: true, art: true, pop: true });
+  } finally {
+    await closeAll(motion, still);
+  }
+});
+
+// ── Help is findable from the more menu ──
+
+test("the more menu has a how-to guide entry and a tour replay entry, both by keyboard", async ({
+  browser,
+}) => {
+  const user = await newUser(browser, "Menu");
+  const { page } = user;
+  try {
+    await createShare(page);
+    await page.getByTestId("menu-button").focus();
+    await page.keyboard.press("Enter");
+    const help = page.getByRole("menuitem", { name: /How to use/ });
+    await expect(help).toBeVisible();
+    // The entry says it opens in a new tab.
+    await expect(help).toContainText("(opens in a new tab)");
+
+    // Enter on it opens the guide in a new tab, and the share stays where it is.
+    await help.focus();
+    const popup = page.waitForEvent("popup");
+    await page.keyboard.press("Enter");
+    const guide = await popup;
+    await guide.waitForLoadState("domcontentloaded");
+    expect(new URL(guide.url()).pathname).toBe("/guide/how");
+    expect(new URL(guide.url()).hash).toBe("#files");
+    expect(await guide.evaluate(() => window.opener)).toBeNull();
+    await expect(guide.getByRole("heading", { level: 2, name: "Adding files" })).toBeVisible();
+    await guide.close();
+    await expect(page.getByTestId("editor")).toBeVisible();
+
+    // Replay: the tour starts from the first step; the menu is closed by then.
+    await page.getByTestId("menu-button").focus();
+    await page.keyboard.press("Enter");
+    const replay = page.getByRole("menuitem", { name: "Replay tutorial" });
+    await replay.focus();
+    await page.keyboard.press("Enter");
+    await expect(tourDialog(page)).toBeVisible();
+    await expect(page.getByTestId("tour-step")).toHaveText("1 / 5");
+    await expect(page.getByTestId("tour-next")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(tourDialog(page)).toBeHidden();
+
+    // The upload entry is there for people who cannot drag (a phone), and opens the dialog.
+    await page.getByTestId("menu-button").focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitem", { name: "Upload files" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "Upload files or a folder" })).toBeVisible();
+  } finally {
+    await closeAll(user);
+  }
+});
+
+test("a viewer's menu has the help entries but no upload entry", async ({ browser }) => {
+  const owner = await newUser(browser, "Owner");
+  const viewer = await newUser(browser, "Reader");
+  try {
+    const id = await createShare(owner.page);
+    const dialog = await openShareDialog(owner.page, "Access");
+    const patched = owner.page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/shares/${id}`) && response.request().method() === "PATCH",
+    );
+    await dialog.getByTestId("access-view").click();
+    await patched;
+    await dialog.getByRole("tab", { name: "Code and QR" }).click();
+    const viewUrl = await dialog.getByTestId("share-link").inputValue();
+    await viewer.page.goto(new URL(viewUrl).pathname);
+    await waitForEditor(viewer.page);
+    await expect(viewer.page.getByTestId("banner-readonly")).toBeVisible();
+    await viewer.page.getByTestId("menu-button").click();
+    await expect(viewer.page.getByRole("menuitem", { name: /How to use/ })).toBeVisible();
+    await expect(viewer.page.getByRole("menuitem", { name: "Replay tutorial" })).toBeVisible();
+    await expect(viewer.page.getByTestId("menu-upload")).toHaveCount(0);
+  } finally {
+    await closeAll(owner, viewer);
+  }
+});
+
+// ── The one-time tip about dragging files in ──
+
+/** The device question is out of the way, so the only hint left is the one under test. */
+async function skipDeviceQuestion(page: Page): Promise<void> {
+  // A new browser profile always gets the question, a moment after the editor is up.
+  await page.getByTestId("device-choice-skip").click();
+  await expect(page.getByTestId("device-choice")).toBeHidden();
+}
+
+/**
+ * An owner who has seen the tour but not the tip, with a second person already in the share (the
+ * tip gives way to the "only one here" card while someone is alone). Owners can always add files;
+ * an editor can only when the owner allows it.
+ */
+async function ownerWithCompany(
+  browser: Browser,
+  label: string,
+  options: Parameters<typeof firstTimer>[2] = {},
+): Promise<{ owner: User; company: User; all: User[] }> {
+  const owner = await firstTimer(browser, label, { storageState: TIP_UNSEEN_STORAGE, ...options });
+  const company = await newUser(browser, "Company");
+  const id = await createShare(owner.page);
+  await joinByLink(company, id);
+  await waitForEditor(company.page);
+  await skipDeviceQuestion(owner.page);
+  return { owner, company, all: [owner, company] };
+}
+
+const tip = (page: Page) => page.getByTestId("drop-tip");
+const TIP_KEY = "gachipad.tip.drop";
+const tipStored = (page: Page) => page.evaluate((key) => localStorage.getItem(key), TIP_KEY);
+
+test("the tip shows once for someone who can add files, and dismiss keeps it gone", async ({
+  browser,
+}) => {
+  const { owner, all } = await ownerWithCompany(browser, "Tip");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    await expect(page.getByTestId("drop-tip-text")).toContainText("Drag a file like main.py");
+    // Non-modal: it is not a dialog, and the editor keeps working underneath.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.locator(".cm-content").click();
+    await page.keyboard.type("x");
+    // Typing sends it away for this visit without ending it for good.
+    await expect(tip(page)).toBeHidden();
+    expect(await tipStored(page)).toBeNull();
+    await page.reload();
+    await waitForEditor(page);
+    await expect(tip(page)).toBeVisible();
+
+    // The button opens the upload dialog, and the tip steps aside while it is open.
+    await page.getByTestId("drop-tip-open").click();
+    await expect(page.getByRole("dialog", { name: "Upload files or a folder" })).toBeVisible();
+    await expect(tip(page)).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(tip(page)).toBeVisible();
+
+    // Dismiss by keyboard: gone now, gone after a reload.
+    await page.getByTestId("drop-tip-dismiss").focus();
+    await page.keyboard.press("Enter");
+    await expect(tip(page)).toBeHidden();
+    expect(await tipStored(page)).toBe("1");
+    await page.reload();
+    await waitForEditor(page);
+    await page.waitForTimeout(3000);
+    await expect(tip(page)).toHaveCount(0);
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+test("the first file added by any means ends the tip", async ({ browser }) => {
+  const { owner, all } = await ownerWithCompany(browser, "First");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    // A new file from the add button, not a drop.
+    await page.getByTestId("add-file").click();
+    await page.getByTestId("file-name-input").fill("second.txt");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("tab-second.txt")).toBeVisible();
+    await expect(tip(page)).toBeHidden();
+    await expect.poll(() => tipStored(page)).toBe("1");
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+test("people who cannot add files never get the tip: a viewer, and an editor not allowed to", async ({
+  browser,
+}) => {
+  const owner = await newUser(browser, "Owner");
+  let viewer: User | undefined;
+  let editor: User | undefined;
+  try {
+    const id = await createShare(owner.page);
+    // The default editor: files stay with the owner until the owner allows participants.
+    editor = await firstTimer(browser, "Editor", { storageState: TIP_UNSEEN_STORAGE });
+    await joinByLink(editor, id);
+    await waitForEditor(editor.page);
+
+    const dialog = await openShareDialog(owner.page, "Access");
+    const patched = owner.page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/shares/${id}`) && response.request().method() === "PATCH",
+    );
+    await dialog.getByTestId("access-view").click();
+    await patched;
+    await dialog.getByRole("tab", { name: "Code and QR" }).click();
+    const viewUrl = await dialog.getByTestId("share-link").inputValue();
+    await owner.page.keyboard.press("Escape");
+
+    viewer = await firstTimer(browser, "Read", { storageState: TIP_UNSEEN_STORAGE });
+    await viewer.page.goto(new URL(viewUrl).pathname);
+    await waitForEditor(viewer.page);
+    await expect(viewer.page.getByTestId("banner-readonly")).toBeVisible();
+    await skipDeviceQuestion(viewer.page);
+    await skipDeviceQuestion(editor.page);
+    await viewer.page.waitForTimeout(3500);
+    await expect(tip(viewer.page)).toHaveCount(0);
+    await expect(tip(editor.page)).toHaveCount(0);
+  } finally {
+    await closeAll(...[owner, viewer, editor].filter((user): user is User => user !== undefined));
+  }
+});
+
+test("the tip waits for the tour and for the device question, one hint at a time", async ({
+  browser,
+}) => {
+  // Neither the tour nor the tip has been seen.
+  const owner = await firstTimer(browser, "Order");
+  const company = await newUser(browser, "Company");
+  try {
+    const { page } = owner;
+    const id = await createShare(page);
+    await joinByLink(company, id);
+    await waitForEditor(company.page);
+    // The device question is open: neither the tour nor the tip.
+    await expect(page.getByTestId("device-choice")).toBeVisible();
+    await page.waitForTimeout(3000);
+    await expect(tip(page)).toHaveCount(0);
+    await expect(tourDialog(page)).toBeHidden();
+
+    await answerDeviceQuestion(page);
+    await expect(tourDialog(page)).toBeVisible();
+    await expect(tip(page)).toHaveCount(0);
+
+    // After the tour, the tip may come in.
+    await page.keyboard.press("Escape");
+    await expect(tourDialog(page)).toBeHidden();
+    await expect(tip(page)).toBeVisible();
+  } finally {
+    await closeAll(owner, company);
+  }
+});
+
+test("at 320px the tip points at the upload button and does not widen the page", async ({
+  browser,
+}) => {
+  const { owner, all } = await ownerWithCompany(browser, "Narrow", {
+    viewport: { width: 320, height: 568 },
+  });
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    await expect(page.getByTestId("drop-tip-text")).toHaveText(
+      "Use the upload button to add files, folders or a .zip.",
+    );
+    const box = await tip(page).boundingBox();
+    expect(box).not.toBeNull();
+    expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= 320).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    // Both buttons are big enough to hit.
+    for (const id of ["drop-tip-open", "drop-tip-dismiss"]) {
+      const target = await page.getByTestId(id).boundingBox();
+      expect(target?.height ?? 0).toBeGreaterThanOrEqual(24);
+      expect(target?.width ?? 0).toBeGreaterThanOrEqual(24);
+    }
+  } finally {
+    await closeAll(...all);
   }
 });

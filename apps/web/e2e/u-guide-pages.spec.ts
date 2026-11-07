@@ -554,3 +554,97 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+// ── Adding files, the cursor display setting and the questions around them ──
+
+test("how: the adding-files section covers the ways in, duplicates and what is skipped", async ({
+  browser,
+}) => {
+  for (const [locale, heading, duplicate, skipped] of [
+    ["en", "Adding files", "When the name already exists", "What is skipped"],
+    ["ko", "파일 넣는 방법", "같은 이름의 파일이 있으면", "건너뛰는 파일"],
+  ] as const) {
+    const user = await newUser(browser, "Maya", { viewport: { width: 1280, height: 800 } });
+    const { page } = user;
+    try {
+      await openGuide(page, "how", locale, "#files");
+      const section = page.locator("section#files");
+      await expect(section.getByRole("heading", { level: 2 })).toHaveText(heading);
+      await expect(page.locator('nav.ix-toc a[href="#files"]')).toHaveText(heading);
+      // Four ways in, then the two rules people ask about.
+      await expect(section.locator(".ix-gcard")).toHaveCount(4);
+      await expect(section).toContainText(duplicate);
+      await expect(section).toContainText(skipped);
+      await expect(section).toContainText("main (2).py");
+      await expect(section).toContainText(".zip");
+      // The numbers are the ones the product uses, not placeholders.
+      await expect(section).not.toContainText(/\{\w+\}/);
+      await expect(section).toContainText("5");
+      await expect(section).toContainText("100");
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+    } finally {
+      await closeAll(user);
+    }
+  }
+});
+
+test("features: the cursor display section explains each mode, and the files section links to adding files", async ({
+  browser,
+}) => {
+  for (const [locale, heading, auto] of [
+    ["en", "Other people's cursors", "Auto (default)"],
+    ["ko", "다른 사람 커서", "자동 (기본)"],
+  ] as const) {
+    const user = await newUser(browser, "Maya", { viewport: { width: 1280, height: 800 } });
+    const { page } = user;
+    try {
+      await openGuide(page, "features", locale, "#cursors");
+      const section = page.locator("section#cursors");
+      await expect(section.getByRole("heading", { level: 2 })).toHaveText(heading);
+      await expect(section).toContainText(auto);
+      await expect(section).not.toContainText(/\{\w+\}/);
+      await expect(page.locator('nav.ix-toc a[href="#cursors"]')).toHaveCount(1);
+      const more = page.locator('section#files a[href="/guide/how#files"]');
+      await expect(more).toHaveCount(1);
+    } finally {
+      await closeAll(user);
+    }
+  }
+});
+
+test("faq: the questions about duplicate names, upload problems and cursors are there", async ({
+  browser,
+}) => {
+  for (const [locale, questions] of [
+    [
+      "en",
+      [
+        ["duplicate", "What if a file with the same name is uploaded?"],
+        ["uploadFails", "My files won't upload"],
+        ["cursors", "Other people's cursors are distracting"],
+      ],
+    ],
+    [
+      "ko",
+      [
+        ["duplicate", "같은 이름 파일을 올리면?"],
+        ["uploadFails", "파일이 안 올라가요"],
+        ["cursors", "다른 사람 커서가 거슬려요"],
+      ],
+    ],
+  ] as const) {
+    const user = await newUser(browser, "Maya", { viewport: { width: 1280, height: 800 } });
+    const { page } = user;
+    try {
+      for (const [id, question] of questions) {
+        await openGuide(page, "faq", locale, `#${id}`);
+        // A link to a question opens its answer.
+        const button = page.locator(`#${id} button[aria-expanded]`);
+        await expect(button).toHaveAttribute("aria-expanded", "true");
+        await expect(button).toContainText(question);
+      }
+    } finally {
+      await closeAll(user);
+    }
+  }
+});

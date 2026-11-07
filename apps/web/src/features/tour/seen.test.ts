@@ -54,6 +54,17 @@ describe("tourSeen", () => {
   });
 });
 
+describe("the tour version", () => {
+  it("is past 1, so people who saw the first tour see the rewritten one once", () => {
+    expect(TOUR_VERSION).toBeGreaterThan(1);
+    vi.stubGlobal("localStorage", memoryStorage({ [TOUR_STORAGE_KEY]: "1" }));
+    expect(tourSeen()).toBe(false);
+    markTourSeen();
+    resetTourMemory();
+    expect(tourSeen()).toBe(true);
+  });
+});
+
 describe("isVersionSeen", () => {
   it("shows a changed tour again to everyone who saw an older one", () => {
     expect(isVersionSeen(1, 1)).toBe(true);

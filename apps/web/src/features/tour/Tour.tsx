@@ -2,10 +2,19 @@ import { Button, Dialog, DialogContent } from "@gachipad/ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../../lib/i18n";
-import { useEditor } from "../editor/context";
+import { useDocumentPermissions, useEditor } from "../editor/context";
+import { DropIllustration } from "./DropIllustration";
 import { type Placement, placePopover, popoverWidth } from "./place";
 import { markTourSeen } from "./seen";
-import { anchorOf, availableSteps, type Box, boxOf, type TourAnchor } from "./steps";
+import {
+  anchorOf,
+  availableSteps,
+  type Box,
+  bodyOf,
+  boxOf,
+  isTouchOnly,
+  type TourAnchor,
+} from "./steps";
 import "./tour.css";
 
 /** Room around the highlighted element inside the spotlight. */
@@ -57,6 +66,10 @@ export default function Tour({ onFinish, onExited }: TourProps) {
   );
   const step = steps[index];
   const last = index === steps.length - 1;
+  // Fixed for the run: a tour does not change its words when the window is resized.
+  const [touchOnly] = useState(isTouchOnly);
+  const limited = !useDocumentPermissions().files;
+  const body = step ? t(bodyOf(step, { limited, touchOnly })) : "";
 
   const close = useCallback(
     (seen: boolean) => {
@@ -137,10 +150,10 @@ export default function Tour({ onFinish, onExited }: TourProps) {
         current: index + 1,
         total: steps.length,
         title: t(step.title),
-        body: t(step.body),
+        body,
       }),
     );
-  }, [step, index, steps.length, t]);
+  }, [step, index, steps.length, t, body]);
 
   if (!step) return null;
   const viewport = { width: window.innerWidth, height: window.innerHeight };
@@ -180,7 +193,7 @@ export default function Tour({ onFinish, onExited }: TourProps) {
           size="sm"
           scrim={false}
           title={t(step.title)}
-          description={t(step.body)}
+          description={body}
           closeLabel={t("common.close")}
           className="tour-pop"
           data-testid="tour"
@@ -227,6 +240,7 @@ export default function Tour({ onFinish, onExited }: TourProps) {
             </>
           }
         >
+          {step.illustration === "drop" && !limited && !touchOnly ? <DropIllustration /> : null}
           <p className="text-caption text-fg-3 tabular" data-testid="tour-step">
             {t("tour.step", { current: index + 1, total: steps.length })}
           </p>

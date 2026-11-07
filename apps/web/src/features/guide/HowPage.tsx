@@ -11,10 +11,12 @@ export function HowPage() {
   const { t, settings } = useGuide();
   const app = useT();
   useGuideTitle(t("guide.how.title"));
-  const toc = (["create", "tell", "edit", "roles", "control", "offline"] as const).map((id) => ({
-    id,
-    label: t(`guide.how.toc.${id}`),
-  }));
+  const toc = (["create", "tell", "edit", "files", "roles", "control", "offline"] as const).map(
+    (id) => ({
+      id,
+      label: t(`guide.how.toc.${id}`),
+    }),
+  );
   const roleRows = [
     ["edit", true, true, false],
     ["history", true, false, false],
@@ -81,6 +83,26 @@ export function HowPage() {
             }))}
           />
         </Split>
+      </GSection>
+
+      <GSection id="files" title={t("guide.how.files.title")} lead={t("guide.how.files.lead")}>
+        <Cards
+          items={(["drag", "button", "paste", "zip"] as const).map((key) => ({
+            title: t(`guide.how.files.${key}.title`),
+            body: t(`guide.how.files.${key}.body`),
+          }))}
+        />
+        <p className="ix-gsub">{t("guide.how.files.duplicate.title")}</p>
+        <P>{t("guide.how.files.duplicate.body")}</P>
+        <p className="ix-gsub">{t("guide.how.files.skipped.title")}</p>
+        <P>
+          {t("guide.how.files.skipped.body", {
+            perFile: FACTS.importFileMB,
+            max: FACTS.files,
+            doc: FACTS.defaultDocMB,
+          })}
+        </P>
+        <P>{t("guide.how.files.viewer")}</P>
       </GSection>
 
       <GSection id="roles" title={t("guide.how.roles.title")} lead={t("guide.how.roles.lead")}>

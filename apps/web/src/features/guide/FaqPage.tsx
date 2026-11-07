@@ -11,7 +11,19 @@ import { type FaqEntry, FaqGroup } from "./parts";
 const GROUPS = [
   { id: "start", keys: ["expiry", "save", "account", "phone", "run"] },
   { id: "people", keys: ["security", "cantEdit", "pin", "notNearby", "codeFails"] },
-  { id: "edit", keys: ["languages", "offline", "size", "folder", "history"] },
+  {
+    id: "edit",
+    keys: [
+      "languages",
+      "offline",
+      "size",
+      "folder",
+      "duplicate",
+      "uploadFails",
+      "cursors",
+      "history",
+    ],
+  },
   { id: "network", keys: ["outside", "internet", "tracking", "shared", "contact"] },
 ] as const;
 
@@ -60,7 +72,11 @@ export function FaqPage() {
           : app(`intro.faq.${key as "save"}.a`);
       return { id: key, question: app(`intro.faq.${key as "save"}.q`), answer };
     }
-    const params = { upload: settings.uploadMB, max: FACTS.files };
+    const params = {
+      upload: settings.uploadMB,
+      max: FACTS.files,
+      perFile: FACTS.importFileMB,
+    };
     return {
       id: key,
       question: t(`guide.faq.${key as "account"}.q`),

@@ -25,6 +25,15 @@ describe("guide facts", () => {
     expect(defaults.audit.retentionDays).toBe(90);
   });
 
+  it("quote the drop and cursor numbers the task describes", () => {
+    // From the product description of file drop and remote cursors: files over 5 MB are skipped,
+    // and with 6 or more people in a file the auto cursor mode quiets the carets.
+    expect(FACTS.importFileMB).toBe(5);
+    expect(FACTS.cursorCrowd).toBe(6);
+    // At most this many files at once is the most a share can hold.
+    expect(FACTS.files).toBe(100);
+  });
+
   it("back the claim of more than 200 languages", () => {
     expect(LANGUAGES.length).toBeGreaterThan(200);
   });
