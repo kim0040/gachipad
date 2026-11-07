@@ -100,8 +100,11 @@ export function DropTip() {
   // Wherever focus is, and left for others to see too: Vim mode and the search panel use Escape.
   useEffect(() => {
     if (!visible) return;
+    // The Escape that closed the tour or a dialog can bring the tip in while it is still on its way
+    // to this listener: that one was not meant for the tip.
+    const shownAt = performance.now();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dismiss();
+      if (event.key === "Escape" && event.timeStamp >= shownAt) dismiss();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

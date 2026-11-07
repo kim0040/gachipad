@@ -101,6 +101,8 @@ interface Walk {
   overflow: number;
   /** `MAX_WALKED_ENTRIES` was reached: nothing further is listed, at any level. */
   stopped: boolean;
+  /** The file the browser handed over next to a top-level entry, for when the entry cannot read. */
+  direct: Map<FsEntry, File>;
 }
 
 /** Counts one entry of the walk; false once the walk has seen as many as it may. */
@@ -128,7 +130,12 @@ async function readFile(entry: FsEntry, walk: Walk): Promise<void> {
     (file as File & { gachipadPath?: string }).gachipadPath = path;
     walk.files.push(file);
   } catch {
-    walk.skipped.push({ name: path, reason: "unreadable" });
+    // WebKit gives an entry to files with no path on disk, and it fails with "Path does not exist".
+    const direct = walk.direct.get(entry);
+    if (direct) {
+      (direct as File & { gachipadPath?: string }).gachipadPath = path;
+      walk.files.push(direct);
+    } else walk.skipped.push({ name: path, reason: "unreadable" });
   }
 }
 
@@ -174,6 +181,7 @@ type EntryItem = DataTransferItem & { webkitGetAsEntry?: () => FsEntry | null };
 export function collectDrop(transfer: DataTransfer): Promise<DroppedFiles> {
   const entries: FsEntry[] = [];
   const loose: File[] = [];
+  const direct = new Map<FsEntry, File>();
   let withoutEntries = false;
   try {
     for (const item of Array.from(transfer.items ?? [])) {
@@ -181,6 +189,8 @@ export function collectDrop(transfer: DataTransfer): Promise<DroppedFiles> {
       const entry = (item as EntryItem).webkitGetAsEntry?.() ?? null;
       if (entry) {
         entries.push(entry);
+        const file = entry.isFile ? item.getAsFile() : null;
+        if (file) direct.set(entry, file);
         continue;
       }
       if (typeof (item as EntryItem).webkitGetAsEntry !== "function") withoutEntries = true;
@@ -191,15 +201,16 @@ export function collectDrop(transfer: DataTransfer): Promise<DroppedFiles> {
   } catch {
     // Fall through with whatever was read.
   }
-  return finish(entries, loose, withoutEntries);
+  return finish(entries, loose, direct, withoutEntries);
 }
 
 async function finish(
   entries: FsEntry[],
   loose: File[],
+  direct: Map<FsEntry, File>,
   withoutEntries: boolean,
 ): Promise<DroppedFiles> {
-  const walk: Walk = { files: [], skipped: [], visited: 0, overflow: 0, stopped: false };
+  const walk: Walk = { files: [], skipped: [], visited: 0, overflow: 0, stopped: false, direct };
   try {
     for (const entry of entries) {
       if (!visit(walk)) break;

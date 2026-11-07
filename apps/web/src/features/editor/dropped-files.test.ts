@@ -171,6 +171,20 @@ describe("collectDrop", () => {
     expect(dropped.skipped).toContainEqual({ name: "", reason: "notChecked", count: 0 });
   });
 
+  it("falls back on the file handed over next to an entry that cannot read it", async () => {
+    const entry = fileEntry("direct.txt", "x", true);
+    const file = new File(["x"], "direct.txt");
+    const transfer = {
+      items: [{ kind: "file", webkitGetAsEntry: () => entry, getAsFile: () => file }],
+      files: [],
+      types: ["Files"],
+    } as unknown as DataTransfer;
+    const dropped = await collectDrop(transfer);
+    expect(dropped.files).toEqual([file]);
+    expect(dropped.skipped).toEqual([]);
+    expect((dropped.files[0] as File & { gachipadPath?: string }).gachipadPath).toBe("direct.txt");
+  });
+
   it("keeps names in NFC, whatever form the file manager handed over", async () => {
     const nfd = "폴더/과제1.py".normalize("NFD");
     const dropped = await collectDrop(transferOf([fileEntry(nfd)]));

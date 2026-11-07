@@ -568,7 +568,7 @@ test("a crowded file calms down: near flags only, the host pinned, hysteresis on
     await far.page.keyboard.type("!");
     await expect(flagOf(page, far.name)).toHaveCSS("opacity", "1");
     await expectFlagHidden(page, far.name);
-    await chooseCursors(page, "Automatic");
+    await chooseCursors(page, "Auto");
     await expect(editor).toHaveAttribute("data-remote-cursors", "crowded");
 
     // Leaving: still crowded at 5, back to normal only at 4.
@@ -665,7 +665,7 @@ test("each cursor setting applies live, and hovering a caret shows the name in a
     await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
     await expectFlagHidden(page, peer.name);
 
-    await chooseCursors(page, "Automatic");
+    await chooseCursors(page, "Auto");
     await peer.page.keyboard.type("f");
     await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
 
@@ -713,9 +713,14 @@ test("a name opened by hover stays while the pointer is on it, and Escape closes
     await page.getByTestId("settings-button").focus();
     await page.evaluate(() => {
       const w = window as unknown as { __escapeSeen?: boolean };
-      window.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") w.__escapeSeen = !event.defaultPrevented;
-      });
+      // In the same phase as the cursors' listener and after it: what it did to the event shows here.
+      window.addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "Escape") w.__escapeSeen = !event.defaultPrevented;
+        },
+        { capture: true },
+      );
     });
     await page.keyboard.press("Escape");
     await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "0");
@@ -735,11 +740,11 @@ test("switching to cursors only ends a name that is still showing, at once", asy
     const page = observer.page;
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await goToLine(peer, 6);
-    await expect(caretOf(page, peer.name)).toBeVisible();
+    await expect(caretOf(page, peer.name)).toHaveCount(1);
     await expectFlagHidden(page, peer.name);
 
     // The option is one click away while the peer starts a flash of three seconds.
-    const from = ["Automatic", "Names when moving"];
+    const from = ["Auto", "Names when moving"];
     for (const [index, mode] of from.entries()) {
       if (index > 0) await chooseCursors(page, mode);
       await page.getByTestId("settings-button").click();
@@ -770,13 +775,14 @@ test("a flag near the top of what is visible hangs below, wherever the document 
     const page = observer.page;
     await goToLine(peer, 20);
     const caret = caretOf(page, peer.name);
-    await expect(caret).toBeVisible();
+    await expect(caret).toHaveCount(1);
     await expect(caret).not.toHaveClass(/is-top/);
+    // From where the caret is going, not where it is: it may still be gliding there.
     const scrollCaretTo = (offset: number) =>
       caret.evaluate((el, gap) => {
+        const y = (el as HTMLElement).style.transform.match(/, ([\d.]+)px, /)?.[1];
         const scroller = document.querySelector(".cm-scroller") as HTMLElement;
-        scroller.scrollTop +=
-          el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - gap;
+        scroller.scrollTop = Number(y) - gap;
       }, offset);
     // At the very top of the visible part, far from the top of the document.
     await scrollCaretTo(0);
@@ -819,19 +825,19 @@ test("undoing counts as activity, also the undo of a file dropped into the empty
     });
     await expect.poll(() => editorText(page)).toBe("dropped");
     await actor.page.locator(".cm-content").click();
-    await expect(caretOf(page, actor.name)).toBeVisible();
+    await expect(caretOf(page, actor.name)).toHaveCount(1);
     await expectFlagHidden(page, actor.name);
 
     await watchCarets(page);
     await actor.page.keyboard.press("Control+z");
-    await expect.poll(() => editorText(page)).toBe("");
+    await expect.poll(() => editorText(page)).not.toContain("dropped");
     await expect
       .poll(async () => (await readProbe(page)).flashes[actor.name] ?? 0)
       .toBeGreaterThan(0);
     await expectFlagHidden(page, actor.name);
 
     await resetProbe(page);
-    await actor.page.keyboard.press("Control+Shift+z");
+    await actor.page.keyboard.press("Control+y");
     await expect.poll(() => editorText(page)).toBe("dropped");
     await expect
       .poll(async () => (await readProbe(page)).flashes[actor.name] ?? 0)

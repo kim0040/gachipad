@@ -45,6 +45,20 @@ async function transferOf(
   );
 }
 
+/** A paste on `selector`. Firefox ignores `clipboardData` in the constructor, so the event gets it. */
+async function paste(page: Page, selector: string, files: DropFile[], data: [string, string][]) {
+  const transfer = await transferOf(page, files, data);
+  await page.evaluate(
+    ([where, handle]) => {
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: handle });
+      document.querySelector(where as string)?.dispatchEvent(event);
+    },
+    [selector, transfer] as const,
+  );
+  await transfer.dispose();
+}
+
 /** A drag that enters the page at `target`, and keeps sending `dragover` like a browser does. */
 async function dragOver(page: Page, target: Locator, transfer: JSHandle<DataTransfer>) {
   await target.dispatchEvent("dragenter", { dataTransfer: transfer });
@@ -427,16 +441,12 @@ test("a view-only visitor sees why nothing can be added, and a drop says so", as
     await expect(overlay(page)).toHaveCount(0);
     await expect(tabs(page)).toHaveCount(before);
     // Pasting a copied file is refused the same way.
-    await page.evaluate(() => {
-      const data = new DataTransfer();
-      data.items.add(new File(["x"], "pasted.txt", { type: "text/plain" }));
-      data.setData("text/plain", "pasted.txt");
-      document
-        .querySelector(".cm-content")
-        ?.dispatchEvent(
-          new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
-        );
-    });
+    await paste(
+      page,
+      ".cm-content",
+      [{ name: "pasted.txt", content: "x" }],
+      [["text/plain", "pasted.txt"]],
+    );
     await expect(tabs(page)).toHaveCount(before);
     await transfer.dispose();
   } finally {
@@ -768,30 +778,19 @@ test("a file pasted with focus outside the editor is added; a field keeps its ow
   try {
     await createShare(owner.page);
     const page = owner.page;
-    const paste = (selector: string, name: string, text: string, html?: string) =>
-      page.evaluate(
-        ([sel, fileName, plain, markup]) => {
-          const data = new DataTransfer();
-          data.items.add(new File(["pasted\n"], fileName as string, { type: "text/plain" }));
-          data.setData("text/plain", plain as string);
-          if (markup) data.setData("text/html", markup);
-          document
-            .querySelector(sel as string)
-            ?.dispatchEvent(
-              new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
-            );
-        },
-        [selector, name, text, html] as const,
-      );
-    await paste("body", "outside.py", "outside.py");
+    const file = (name: string): DropFile[] => [{ name, content: "pasted\n" }];
+    await paste(page, "body", file("outside.py"), [["text/plain", "outside.py"]]);
     await expect(page.getByTestId("tab-outside.py")).toBeVisible();
 
     // What a Linux file manager puts next to the file.
-    await paste("body", "linux.py", "file:///home/student/linux.py");
+    await paste(page, "body", file("linux.py"), [["text/plain", "file:///home/student/linux.py"]]);
     await expect(page.getByTestId("tab-linux.py")).toBeVisible();
 
     // A copy from a page or a document, with an image of it attached, is not a file from disk.
-    await paste("body", "image.png", "image.png", "<b>words</b>");
+    await paste(page, "body", file("image.png"), [
+      ["text/plain", "image.png"],
+      ["text/html", "<b>words</b>"],
+    ]);
     await page.waitForTimeout(300);
     await expect(page.getByTestId("tab-image.png")).toHaveCount(0);
 
@@ -801,7 +800,7 @@ test("a file pasted with focus outside the editor is added; a field keeps its ow
       input.id = "plain-field";
       document.body.append(input);
     });
-    await paste("#plain-field", "field.py", "field.py");
+    await paste(page, "#plain-field", file("field.py"), [["text/plain", "field.py"]]);
     await page.waitForTimeout(300);
     await expect(page.getByTestId("tab-field.py")).toHaveCount(0);
   } finally {
@@ -902,8 +901,8 @@ test("a drop in flight leaves New share waiting, and keeps saying it is working"
     await dropFiles(page, page.locator("body"), [{ name: "first.py", content: "print(1)\n" }]);
     await expect.poll(() => uploads).toBe(1);
     await expect(overlay(page)).toHaveAttribute("data-mode", "busy");
-    // The overlay takes no pointer, so this is the button itself saying no.
-    await expect(page.getByTestId("new-share")).toBeDisabled();
+    // The overlay takes no pointer, so this is the button itself saying no: loading blocks clicks.
+    await expect(page.getByTestId("new-share")).toHaveAttribute("aria-busy", "true");
     await page.evaluate(() =>
       document.querySelector<HTMLButtonElement>('[data-testid="new-share"]')?.click(),
     );
@@ -1014,16 +1013,12 @@ test("a file copied in a file manager is pasted as a file; ordinary text still p
     await createShare(owner.page);
     const page = owner.page;
     await page.locator(".cm-content").click();
-    await page.evaluate(() => {
-      const data = new DataTransfer();
-      data.items.add(new File(["from disk\n"], "disk.txt", { type: "text/plain" }));
-      data.setData("text/plain", "disk.txt");
-      document
-        .querySelector(".cm-content")
-        ?.dispatchEvent(
-          new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
-        );
-    });
+    await paste(
+      page,
+      ".cm-content",
+      [{ name: "disk.txt", content: "from disk\n" }],
+      [["text/plain", "disk.txt"]],
+    );
     await expect(page.getByTestId("tab-disk.txt")).toBeVisible();
     await expect.poll(() => editorText(page)).toBe("from disk");
 
@@ -1032,15 +1027,7 @@ test("a file copied in a file manager is pasted as a file; ordinary text still p
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("tab-typed.txt")).toBeVisible();
     await page.locator(".cm-content").click();
-    await page.evaluate(() => {
-      const data = new DataTransfer();
-      data.setData("text/plain", "plain words");
-      document
-        .querySelector(".cm-content")
-        ?.dispatchEvent(
-          new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }),
-        );
-    });
+    await paste(page, ".cm-content", [], [["text/plain", "plain words"]]);
     await expect.poll(() => editorText(page)).toBe("plain words");
     await expect(tabs(page)).toHaveCount(2);
   } finally {
