@@ -7,6 +7,13 @@ text of its GitHub release (RELEASING.md).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-08
+
+### Upgrade notes
+
+- No configuration changes or data migrations are required for this update.
+- Users with already open tabs must click Reload on the update prompt one last time, after which pages with no open document that nobody has touched will apply new builds automatically.
+
 ### Added
 - A per-user "Other people's cursors" setting offers Auto (default), Names when moving, Names always on, and Cursors only options.
 - In Auto mode with 4 or more people on a file, selections dim, carets jump without gliding, and names appear only briefly (up to two at a time) when idle participants move or type; with 8 or more, carets also dim and names never appear automatically, while the presenter, the followed user, and the owner or lab teacher keep their names.
@@ -191,7 +198,8 @@ The first release: real-time code sharing for one network, with no outside servi
   edit keys in every open tab. Shares with a PIN or approval load their copy only after the server
   accepts the connection. Lab previews never keep copies.
 
-[Unreleased]: https://github.com/kim0040/gachipad/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/kim0040/gachipad/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/kim0040/gachipad/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/kim0040/gachipad/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/kim0040/gachipad/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kim0040/codesh/compare/v1.0.0...v1.0.1
