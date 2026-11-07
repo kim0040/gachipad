@@ -29,7 +29,9 @@ export type SkipReason =
   | "badPath"
   | "zipTooMany"
   | "zipTooBig"
-  | "zipBad";
+  | "zipBad"
+  | "dropTooBig"
+  | "notChecked";
 
 export interface Skip {
   /** The file or folder as the person knows it (a relative path for files in folders). */
@@ -66,8 +68,8 @@ export const EXCLUDED_FOLDERS: ReadonlySet<string> = new Set([
 
 /** Most files read from one drop; the share holds 100, so this leaves room for the unreadable ones. */
 export const MAX_COLLECTED_FILES = 400;
-/** Directory entries looked at in one drop before the walk gives up on the rest. */
-const MAX_WALKED_ENTRIES = 5000;
+/** Directory entries looked at in one drop before the walk stops and leaves the rest unchecked. */
+export const MAX_WALKED_ENTRIES = 5000;
 
 /**
  * Files a file manager adds on its own (Finder's .DS_Store and ._ copies, Explorer's Thumbs.db and
@@ -97,9 +99,21 @@ interface Walk {
   visited: number;
   /** Files seen past `MAX_COLLECTED_FILES`; they are counted, not read. */
   overflow: number;
+  /** `MAX_WALKED_ENTRIES` was reached: nothing further is listed, at any level. */
+  stopped: boolean;
+  /** The file the browser handed over next to a top-level entry, for when the entry cannot read. */
+  direct: Map<FsEntry, File>;
 }
 
-const stripSlash = (path: string) => path.replace(/^\/+/, "");
+/** Counts one entry of the walk; false once the walk has seen as many as it may. */
+function visit(walk: Walk): boolean {
+  if (walk.stopped) return false;
+  if (++walk.visited > MAX_WALKED_ENTRIES) walk.stopped = true;
+  return !walk.stopped;
+}
+
+/** Names from macOS arrive in NFD; a share keeps one form, so the same name is the same name. */
+const stripSlash = (path: string) => path.replace(/^\/+/, "").normalize("NFC");
 
 async function readFile(entry: FsEntry, walk: Walk): Promise<void> {
   const path = stripSlash(entry.fullPath);
@@ -116,7 +130,12 @@ async function readFile(entry: FsEntry, walk: Walk): Promise<void> {
     (file as File & { gachipadPath?: string }).gachipadPath = path;
     walk.files.push(file);
   } catch {
-    walk.skipped.push({ name: path, reason: "unreadable" });
+    // WebKit gives an entry to files with no path on disk, and it fails with "Path does not exist".
+    const direct = walk.direct.get(entry);
+    if (direct) {
+      (direct as File & { gachipadPath?: string }).gachipadPath = path;
+      walk.files.push(direct);
+    } else walk.skipped.push({ name: path, reason: "unreadable" });
   }
 }
 
@@ -133,16 +152,13 @@ async function readDirectory(entry: FsEntry, walk: Walk): Promise<void> {
   try {
     const reader = entry.createReader();
     // readEntries returns batches until it returns an empty one.
-    for (;;) {
+    while (!walk.stopped) {
       const batch = await new Promise<FsEntry[]>((resolve, reject) =>
         reader.readEntries(resolve, reject),
       );
       if (batch.length === 0) break;
       for (const child of batch) {
-        if (++walk.visited > MAX_WALKED_ENTRIES) {
-          walk.overflow++;
-          continue;
-        }
+        if (!visit(walk)) break;
         await readEntry(child, walk);
       }
     }
@@ -165,6 +181,7 @@ type EntryItem = DataTransferItem & { webkitGetAsEntry?: () => FsEntry | null };
 export function collectDrop(transfer: DataTransfer): Promise<DroppedFiles> {
   const entries: FsEntry[] = [];
   const loose: File[] = [];
+  const direct = new Map<FsEntry, File>();
   let withoutEntries = false;
   try {
     for (const item of Array.from(transfer.items ?? [])) {
@@ -172,6 +189,8 @@ export function collectDrop(transfer: DataTransfer): Promise<DroppedFiles> {
       const entry = (item as EntryItem).webkitGetAsEntry?.() ?? null;
       if (entry) {
         entries.push(entry);
+        const file = entry.isFile ? item.getAsFile() : null;
+        if (file) direct.set(entry, file);
         continue;
       }
       if (typeof (item as EntryItem).webkitGetAsEntry !== "function") withoutEntries = true;
@@ -182,21 +201,26 @@ export function collectDrop(transfer: DataTransfer): Promise<DroppedFiles> {
   } catch {
     // Fall through with whatever was read.
   }
-  return finish(entries, loose, withoutEntries);
+  return finish(entries, loose, direct, withoutEntries);
 }
 
 async function finish(
   entries: FsEntry[],
   loose: File[],
+  direct: Map<FsEntry, File>,
   withoutEntries: boolean,
 ): Promise<DroppedFiles> {
-  const walk: Walk = { files: [], skipped: [], visited: 0, overflow: 0 };
+  const walk: Walk = { files: [], skipped: [], visited: 0, overflow: 0, stopped: false, direct };
   try {
-    for (const entry of entries) await readEntry(entry, walk);
+    for (const entry of entries) {
+      if (!visit(walk)) break;
+      await readEntry(entry, walk);
+    }
   } catch {
     walk.skipped.push({ name: "", reason: "unreadable" });
   }
   for (const file of loose) {
+    if (!visit(walk)) break;
     if (isJunkFile(file.name)) continue;
     if (walk.files.length >= MAX_COLLECTED_FILES) {
       walk.overflow++;
@@ -212,6 +236,8 @@ async function finish(
   if (walk.overflow > 0) {
     walk.skipped.push({ name: "", reason: "tooMany", count: walk.overflow });
   }
+  // How much is left is unknown: not listing it is the point, so it is not counted as a skip.
+  if (walk.stopped) walk.skipped.push({ name: "", reason: "notChecked", count: 0 });
   return { files: walk.files, skipped: walk.skipped };
 }
 

@@ -729,13 +729,6 @@ test("the tip shows once for someone who can add files, and dismiss keeps it gon
     await waitForEditor(page);
     await expect(tip(page)).toBeVisible();
 
-    // The button opens the upload dialog, and the tip steps aside while it is open.
-    await page.getByTestId("drop-tip-open").click();
-    await expect(page.getByRole("dialog", { name: "Upload files or a folder" })).toBeVisible();
-    await expect(tip(page)).toBeHidden();
-    await page.keyboard.press("Escape");
-    await expect(tip(page)).toBeVisible();
-
     // Dismiss by keyboard: gone now, gone after a reload.
     await page.getByTestId("drop-tip-dismiss").focus();
     await page.keyboard.press("Enter");
@@ -743,6 +736,102 @@ test("the tip shows once for someone who can add files, and dismiss keeps it gon
     expect(await tipStored(page)).toBe("1");
     await page.reload();
     await waitForEditor(page);
+    await page.waitForTimeout(3000);
+    await expect(tip(page)).toHaveCount(0);
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+test("the button opens the upload dialog and has done its job: the tip does not come back", async ({
+  browser,
+}) => {
+  const { owner, all } = await ownerWithCompany(browser, "Open");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    await page.getByTestId("drop-tip-open").click();
+    await expect(page.getByRole("dialog", { name: "Upload files or a folder" })).toBeVisible();
+    await expect(tip(page)).toBeHidden();
+    expect(await tipStored(page)).toBe("1");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    await expect(tip(page)).toHaveCount(0);
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+test("Escape dismisses the tip wherever focus is", async ({ browser }) => {
+  const { owner, all } = await ownerWithCompany(browser, "Escape");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    await page.getByTestId("settings-button").focus();
+    await page.keyboard.press("Escape");
+    await expect(tip(page)).toBeHidden();
+    expect(await tipStored(page)).toBe("1");
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+test("another tab ending the tip ends it here too", async ({ browser }) => {
+  const { owner, all } = await ownerWithCompany(browser, "Tabs");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    const other = await owner.context.newPage();
+    await other.goto("/guide");
+    await other.evaluate((key) => localStorage.setItem(key, "1"), TIP_KEY);
+    await expect(tip(page)).toBeHidden();
+    await other.close();
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+/** A real drop event on the editor, with a file in it. */
+const dropInto = (page: Page, name: string) =>
+  page.evaluate((fileName) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["dropped\n"], fileName, { type: "text/plain" }));
+    const target = document.querySelector(".cm-content") as Element;
+    for (const type of ["dragenter", "dragover", "drop"]) {
+      target.dispatchEvent(
+        new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }),
+      );
+    }
+  }, name);
+
+test("a first drop into the empty file ends the tip, though the number of files stays the same", async ({
+  browser,
+}) => {
+  const { owner, all } = await ownerWithCompany(browser, "Placeholder");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    const before = await page.locator('[data-testid^="tab-"]').count();
+    await dropInto(page, "first.py");
+    await expect(page.getByTestId("tab-first.py")).toBeVisible();
+    await expect(page.locator('[data-testid^="tab-"]')).toHaveCount(before);
+    await expect(tip(page)).toBeHidden();
+    await expect.poll(() => tipStored(page)).toBe("1");
+  } finally {
+    await closeAll(...all);
+  }
+});
+
+test("a file added before the tip has come in still ends it", async ({ browser }) => {
+  const { owner, all } = await ownerWithCompany(browser, "Early");
+  try {
+    const { page } = owner;
+    // Right after the device question: inside the moment the editor gets to settle.
+    await page.getByTestId("add-file").click();
+    await page.getByTestId("file-name-input").fill("early.txt");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("tab-early.txt")).toBeVisible();
+    await expect.poll(() => tipStored(page)).toBe("1");
     await page.waitForTimeout(3000);
     await expect(tip(page)).toHaveCount(0);
   } finally {
@@ -845,7 +934,7 @@ test("at 320px the tip points at the upload button and does not widen the page",
     const { page } = owner;
     await expect(tip(page)).toBeVisible();
     await expect(page.getByTestId("drop-tip-text")).toHaveText(
-      "Use the upload button to add files, folders or a .zip.",
+      "Use the upload button to add files or a .zip.",
     );
     const box = await tip(page).boundingBox();
     expect(box).not.toBeNull();

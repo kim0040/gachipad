@@ -5,10 +5,13 @@ import {
   CROWD_LEAVE_PEOPLE,
   caretAt,
   densityOf,
+  FLAG_ROOM_PX,
+  flagHangsBelow,
   flashesName,
   GLIDE_MAX_LINES,
   GLIDE_MAX_X_PX,
   isPinned,
+  linesApart,
   movedChanged,
   NEAR_CURSOR_LINES,
   nextCrowded,
@@ -148,6 +151,29 @@ describe("modes", () => {
     expect(isPinned("always", false, nobody)).toBe(true);
     const everything = { presenter: true, followed: true, host: true };
     expect(isPinned("carets", true, everything)).toBe(false);
+  });
+});
+
+describe("linesApart", () => {
+  const lineHeight = 20;
+
+  it("counts rows on the screen when both carets are drawn: a long wrapped line is not one line", () => {
+    expect(linesApart(0, 500, 100, lineHeight)).toBe(20);
+    expect(linesApart(0, 160, 100, lineHeight)).toBe(NEAR_CURSOR_LINES);
+  });
+
+  it("counts lines of the document when my caret is not drawn", () => {
+    expect(linesApart(7, 500, null, lineHeight)).toBe(7);
+  });
+});
+
+describe("flagHangsBelow", () => {
+  it("is about the visible top, not the top of the document", () => {
+    expect(flagHangsBelow(FLAG_ROOM_PX - 1, 0)).toBe(true);
+    expect(flagHangsBelow(FLAG_ROOM_PX, 0)).toBe(false);
+    expect(flagHangsBelow(1200, 1200)).toBe(true);
+    expect(flagHangsBelow(1200 + FLAG_ROOM_PX, 1200)).toBe(false);
+    expect(flagHangsBelow(1200, 0)).toBe(false);
   });
 });
 

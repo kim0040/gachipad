@@ -99,7 +99,7 @@ export function HowPage() {
           {t("guide.how.files.skipped.body", {
             perFile: FACTS.importFileMB,
             max: FACTS.files,
-            doc: FACTS.defaultDocMB,
+            doc: settings.docMB,
           })}
         </P>
         <P>{t("guide.how.files.viewer")}</P>

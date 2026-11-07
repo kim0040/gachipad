@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { editorFileDropHandlers, pastedFiles, transferHasFiles } from "./file-drop";
+import { editorFileDropHandlers, pastedFiles, pasteIsForPage, transferHasFiles } from "./file-drop";
 
 const withTypes = (...types: string[]) => ({ types }) as unknown as DataTransfer;
 
@@ -40,6 +40,31 @@ describe("pastedFiles", () => {
     expect(pastedFiles(clip([file, other], "main.py\r\nutil.py"))).toEqual([file, other]);
   });
 
+  it("takes the path or file:// URI a Linux file manager puts next to the file", () => {
+    const file = new File(["x"], "main.py");
+    expect(pastedFiles(clip([file], "/home/student/lab1/main.py"))).toEqual([file]);
+    expect(pastedFiles(clip([file], "file:///home/student/lab%201/main.py"))).toEqual([file]);
+    expect(pastedFiles(clip([file], "C:\\Users\\student\\main.py"))).toEqual([file]);
+    const korean = new File(["x"], "과제1.py");
+    expect(pastedFiles(clip([korean], "file:///tmp/%EA%B3%BC%EC%A0%9C1.py"))).toEqual([korean]);
+    expect(pastedFiles(clip([korean], "/tmp/과제1.py".normalize("NFD")))).toEqual([korean]);
+  });
+
+  it("does not mistake a path to something else for the file", () => {
+    const file = new File(["x"], "main.py");
+    expect(pastedFiles(clip([file], "/home/student/other.py"))).toEqual([]);
+    expect(pastedFiles(clip([file], "file:///home/student/other.py"))).toEqual([]);
+    expect(pastedFiles(clip([file], "file://%"))).toEqual([]);
+  });
+
+  it("leaves anything with HTML alone, whatever its text says", () => {
+    const file = new File(["x"], "main.py");
+    const html = { ...clip([file], "main.py"), types: ["Files", "text/plain", "text/html"] };
+    expect(pastedFiles(html)).toEqual([]);
+    const plain = { ...clip([file], "main.py"), types: ["Files", "text/plain"] };
+    expect(pastedFiles(plain)).toEqual([file]);
+  });
+
   it("leaves ordinary text alone, also when an image of it came along", () => {
     const image = new File(["x"], "image.png");
     expect(pastedFiles(clip([], "print(1)"))).toEqual([]);
@@ -61,5 +86,11 @@ describe("pastedFiles", () => {
         getData: () => "main.py",
       }),
     ).toEqual([file]);
+  });
+});
+
+describe("pasteIsForPage", () => {
+  it("takes a paste with focus on nothing", () => {
+    expect(pasteIsForPage(null)).toBe(true);
   });
 });

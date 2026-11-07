@@ -1,6 +1,6 @@
 import { Button, Dialog, DialogContent, toast } from "@gachipad/ui";
 import { CloudOff, Eye, HardDrive, Presentation, ShieldAlert, Wifi, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { chooseOfflineCopy } from "../../lib/device";
 import { copyText } from "../../lib/format";
 import { useT } from "../../lib/i18n";
@@ -168,11 +168,16 @@ function UnsentTextRecovery() {
   const { session, state } = useEditor();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  // New text to rescue opens it; a newer copy of a file already listed only updates the banner, or
+  // every keystroke refused by a full share would take the keyboard away again.
+  const listed = useRef(0);
   useEffect(() => {
-    if (state.unsentText.length) {
+    const count = state.unsentText.length;
+    if (count > listed.current) {
       setOpen(true);
       setCopied(false);
     }
+    listed.current = count;
   }, [state.unsentText]);
   if (!state.unsentText.length) return null;
   return (

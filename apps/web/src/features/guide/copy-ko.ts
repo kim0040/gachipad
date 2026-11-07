@@ -77,10 +77,10 @@ export const guideKo: Record<GuideKey, string> = {
     "파일, 폴더, .zip을 공유 화면 어디에나 끌어다 놓으세요. 화면 전체에 안내가 뜨고, 놓으면 바로 추가돼요. 첫 화면에 놓으면 그 파일로 새 공유가 만들어져요.",
   "guide.how.files.button.title": "올리기 버튼",
   "guide.how.files.button.body":
-    "휴대폰처럼 끌어다 놓기 어려운 기기에서는 더 보기 메뉴의 파일 올리기를 쓰세요. 파일이나 폴더를 골라 올릴 수 있어요.",
+    "휴대폰처럼 끌어다 놓기 어려운 기기에서는 더 보기 메뉴의 파일 올리기를 쓰세요. 파일을 골라 올릴 수 있고, 컴퓨터에서는 폴더도 통째로 올릴 수 있어요.",
   "guide.how.files.paste.title": "복사해서 붙여넣기",
   "guide.how.files.paste.body":
-    "파일 탐색기나 Finder에서 복사한 파일은 편집기에 붙여넣어도 추가돼요.",
+    "파일 탐색기나 Finder에서 복사한 파일은 공유 화면 어디에 붙여넣어도 추가돼요.",
   "guide.how.files.zip.title": ".zip과 폴더",
   "guide.how.files.zip.body":
     ".zip은 풀어서 폴더 구조 그대로 넣고, 폴더는 안의 파일을 모두 넣어요. .git, node_modules, __pycache__ 같은 폴더는 가져오지 않아요.",
@@ -89,7 +89,7 @@ export const guideKo: Record<GuideKey, string> = {
     "이름도 내용도 같으면 새로 만들지 않고 있는 파일을 열어 줘요. 이름은 같은데 내용이 다르면 main (2).py처럼 번호를 붙여 따로 추가하고, 있던 파일은 건드리지 않아요.",
   "guide.how.files.skipped.title": "건너뛰는 파일",
   "guide.how.files.skipped.body":
-    "텍스트가 아닌 파일, {perFile}MB를 넘는 파일, 한 번에 {max}개를 넘는 파일, 공유의 크기 제한({doc}MB)을 넘는 파일, 읽을 수 없는 파일은 건너뛰어요. 어떤 파일이 왜 빠졌는지는 알림에 이름과 함께 나와요.",
+    "텍스트가 아닌 파일, {perFile}MB를 넘는 파일, 한 번에 {max}개를 넘는 파일, 공유의 크기 제한(이 서버의 관리자가 정한 {doc}MB)을 넘는 파일, 읽을 수 없는 파일은 건너뛰어요. 어떤 파일이 왜 빠졌는지는 알림에 이름과 함께 나와요.",
   "guide.how.files.viewer":
     "보기 전용으로 들어온 사람은 파일을 추가할 수 없고, 파일을 놓으면 왜 안 되는지 알려 줘요.",
 
@@ -183,7 +183,7 @@ export const guideKo: Record<GuideKey, string> = {
     "파일, 폴더, .zip을 화면 어디에나 끌어다 놓거나 더 보기 메뉴의 파일 올리기로 추가해요. .DS_Store, Thumbs.db, __MACOSX 같은 운영체제 부산물은 건너뛰고, Windows 경로와 줄바꿈은 알아서 정리해요.",
   "guide.features.files.more": "넣는 방법과 건너뛰는 파일 자세히 보기",
   "guide.features.files.body3":
-    "크기 제한은 관리자가 정해요. 기본값은 업로드 한 번에 {upload}MB, 공유 하나의 글에 {doc}MB예요.",
+    "크기 제한은 서버마다 관리자가 정해요. 이 서버에서는 업로드 한 번에 {upload}MB, 공유 하나의 글에 {doc}MB까지예요.",
 
   "guide.features.history.title": "이력과 복원",
   "guide.features.history.body1":

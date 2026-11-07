@@ -173,8 +173,8 @@ export const api = {
     request<SessionResponse>("PATCH", "/api/session", { body }),
   logout: () => request<{ ok: true }>("POST", "/api/auth/logout"),
 
-  createShare: (body: CreateShareBody = {}) =>
-    request<CreateShareResponse>("POST", "/api/shares", { body }),
+  createShare: (body: CreateShareBody = {}, signal?: AbortSignal) =>
+    request<CreateShareResponse>("POST", "/api/shares", { body, signal }),
   listShares: (signal?: AbortSignal) => request<ShareListItem[]>("GET", "/api/shares", { signal }),
   putLabels: (id: string, body: PutLabelsBody) =>
     request<ShareLabels>("PUT", `/api/shares/${id}/labels`, { body }),
@@ -223,7 +223,7 @@ export const api = {
   nearby: (signal?: AbortSignal) => request<NearbyItem[]>("GET", "/api/nearby", { signal }),
   invite: (body: CreateInviteBody) => request<{ ok: true }>("POST", "/api/invites", { body }),
 
-  upload: (files: File[], options: { asShare?: boolean } = {}) => {
+  upload: (files: File[], options: { asShare?: boolean; signal?: AbortSignal } = {}) => {
     const form = new FormData();
     for (const file of files) {
       form.append("file", file, relativePathOf(file) ?? file.name);
@@ -231,6 +231,7 @@ export const api = {
     return request<UploadResult[] | CreateShareResponse>("POST", "/api/uploads", {
       form,
       query: options.asShare ? { asShare: 1 } : undefined,
+      signal: options.signal,
     });
   },
   uploadUrl: (uploadId: string) => `/api/uploads/${uploadId}`,

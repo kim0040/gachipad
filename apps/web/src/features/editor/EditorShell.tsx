@@ -49,6 +49,7 @@ import { TourMount } from "../tour/TourMount";
 import { copyAll, downloadFile, downloadZip, looksLikeSecret } from "./actions";
 import { EditorBanners } from "./banners";
 import { CommentsPanel } from "./CommentsPanel";
+import { pastedFiles, pasteIsForPage } from "./cm/file-drop";
 import { editorCommands } from "./cm/keymaps";
 import { useDocumentPermissions, useEditor } from "./context";
 import { showAloneHint } from "./doc-info";
@@ -535,6 +536,18 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
     onDrop: (transfer) => void collectDrop(transfer).then((dropped) => importRef.current(dropped)),
   });
   const onPasteFiles = useCallback((files: File[]) => void importRef.current(files), []);
+  // Focus can be anywhere when files are pasted: on a tab, on a button, or on nothing at all.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || !pasteIsForPage(event.target)) return;
+      const files = pastedFiles(event.clipboardData);
+      if (files.length === 0) return;
+      event.preventDefault();
+      void importRef.current(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
   const emptyHint = useEmptyHint({ readOnly: ctx.readOnly, canImport });
 
   const tree = <FileTree ops={ops} />;

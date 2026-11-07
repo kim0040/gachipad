@@ -6,6 +6,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { History, LayoutTemplate, Plus, Radar, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { api, isApiError } from "../../lib/api";
+import { useDragCapable, useIsNarrow } from "../../lib/appearance";
 import { useEventsSnapshot } from "../../lib/events";
 import { firstLines } from "../../lib/format";
 import { useLocale, useT } from "../../lib/i18n";
@@ -13,7 +14,6 @@ import { openTemplates } from "../../lib/overlays";
 import { useSession } from "../../lib/session";
 import { FileDropOverlay } from "../app/FileDropOverlay";
 import { useFileDrop } from "../app/file-drop";
-import { collectDrop } from "../editor/dropped-files";
 import { useCreateShare } from "./use-create-share";
 
 const CODE_LENGTH = 6;
@@ -28,21 +28,17 @@ export function StartPanel({ className }: { className?: string }) {
   const create = useCreateShare();
   // Files dropped anywhere on the page start a new share; the overlay says so, and keeps saying it
   // (with a spinner) while the share is created.
-  const createRef = useRef(create.createFromFiles);
-  createRef.current = create.createFromFiles;
-  const [dropping, setDropping] = useState(false);
   const dropOverlay = useFileDrop({
     mode: "create",
     denied: null,
-    busy: dropping,
-    onDrop: (transfer) => {
-      setDropping(true);
-      // Read the transfer now, in the event: the browser empties it afterwards.
-      void collectDrop(transfer)
-        .then((dropped) => createRef.current(dropped))
-        .finally(() => setDropping(false));
-    },
+    busy: create.pending,
+    showBusy: create.pendingFiles,
+    onDrop: create.createFromDrop,
   });
+  // Where nothing can be dragged in, or there is no room to aim, the same files come from a picker.
+  const dragCapable = useDragCapable();
+  const narrow = useIsNarrow();
+  const picker = useRef<HTMLInputElement>(null);
 
   return (
     <div className={`flex flex-col gap-8 ${className ?? ""}`} data-testid="start-panel">
@@ -63,16 +59,45 @@ export function StartPanel({ className }: { className?: string }) {
         <Button
           size="lg"
           leading={<LayoutTemplate />}
+          disabled={create.pending}
           onClick={openTemplates}
           data-testid="new-from-template"
           className="sm:shrink-0"
         >
           {t("template.startAction")}
         </Button>
-        <p className="flex items-center gap-1.5 text-caption text-fg-3">
-          <Upload aria-hidden="true" className="size-3.5 shrink-0" />
-          {t("upload.dropHint")}
-        </p>
+        {dragCapable && !narrow ? (
+          <p className="flex items-center gap-1.5 text-caption text-fg-3">
+            <Upload aria-hidden="true" className="size-3.5 shrink-0" />
+            {t("upload.dropHint")}
+          </p>
+        ) : (
+          <>
+            <Button
+              size="lg"
+              leading={<Upload />}
+              disabled={create.pending}
+              onClick={() => picker.current?.click()}
+              data-testid="start-upload"
+              className="sm:shrink-0"
+            >
+              {t("upload.startAction")}
+            </Button>
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              hidden
+              data-testid="start-upload-input"
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                // The same files can be picked again after a failure.
+                event.target.value = "";
+                void create.createFromFiles(files);
+              }}
+            />
+          </>
+        )}
       </div>
 
       <JoinByCode />

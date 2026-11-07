@@ -1,4 +1,10 @@
-import { generateClientId, participantPermissions, signCollabToken, YDOC } from "@gachipad/shared";
+import {
+  AWARENESS_MAX_STATE_BYTES,
+  generateClientId,
+  participantPermissions,
+  signCollabToken,
+  YDOC,
+} from "@gachipad/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { loadPersisted } from "./persisted-doc.js";
@@ -230,6 +236,23 @@ describe.runIf(available)("participant document permissions", () => {
     expect(states.find((s) => s.user?.clientId === teacherId)?.host).toBe(true);
     expect(states.find((s) => s.user?.clientId === share.ownerId)?.host).toBeUndefined();
   });
+  it("holds awareness to its limit in bytes, not characters", async () => {
+    const { editor, viewer } = await room();
+    const noteOnViewer = () =>
+      [...(viewer.provider.awareness?.getStates().values() ?? [])].find((s) => s.note)?.note;
+    // Under the limit by both counts: it arrives.
+    const ascii = "a".repeat(AWARENESS_MAX_STATE_BYTES / 2);
+    editor.provider.awareness?.setLocalStateField("note", ascii);
+    await waitFor(() => noteOnViewer() === ascii, "short note received");
+    // As many characters, three bytes each: over the limit on the wire.
+    const korean = "가".repeat(AWARENESS_MAX_STATE_BYTES / 2);
+    expect(JSON.stringify({ note: korean }).length).toBeLessThan(AWARENESS_MAX_STATE_BYTES);
+    expect(Buffer.byteLength(korean, "utf8")).toBeGreaterThan(AWARENESS_MAX_STATE_BYTES);
+    editor.provider.awareness?.setLocalStateField("note", korean);
+    await sleep(200);
+    expect(noteOnViewer()).not.toBe(korean);
+  });
+
   it("keeps file structure and language independent and ignores forged presenter awareness", async () => {
     const { share, owner, editor, viewer } = await room();
     await h.stores.shares.update(share.id, { access: { allowParticipantLanguage: true } });

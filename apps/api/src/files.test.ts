@@ -3,6 +3,11 @@ import { attachment, basename, decodeText, firstLines, sanitizePath } from "./fi
 import { DEFAULT_LANGUAGE, languageForPath } from "./languages.js";
 
 describe("sanitizePath", () => {
+  it("puts a name from macOS in NFC, so it is the same name as one typed elsewhere", () => {
+    const nfc = "폴더/과제1.py";
+    expect(sanitizePath(nfc.normalize("NFD"))).toBe(nfc);
+  });
+
   it("normalises separators and redundant segments", () => {
     expect(sanitizePath("src\\app/./main.ts")).toBe("src/app/main.ts");
     expect(sanitizePath("/abs/olute.py")).toBe("abs/olute.py");

@@ -14,7 +14,7 @@ import {
 /**
  * Chromium runs every spec. Firefox and WebKit run the cross-OS spec (shortcuts, labels, IME,
  * OS-dependent features), so a Mac or Linux visitor's engine is covered too, the device spec, and
- * the motion and guide pages specs.
+ * the motion, guide pages and file drop specs.
  * They need `pnpm exec playwright install firefox webkit` once; `E2E_BROWSERS=chromium` skips them.
  */
 const ENGINES = (process.env.E2E_BROWSERS ?? "chromium,firefox,webkit").split(",");
@@ -30,6 +30,9 @@ const GUIDE = /(?:l-intro-header|m-intro-detail|u-guide-pages)\.spec\.ts$/;
 const TOUR = /w-[a-z-]+\.spec\.ts$/;
 // Owner and participant permissions: refusals and resync go through each engine's WebSocket.
 const PERMISSIONS = /x-permissions\.spec\.ts$/;
+// Dropping files: DragEvent, DataTransfer and File differ per engine. z-file-drop-native skips itself
+// outside Chromium, which is the only one with a drag input to drive.
+const FILE_DROP = /z-file-drop(?:-native)?\.spec\.ts$/;
 
 const secret = "e2e-secret-e2e-secret-e2e-secret-0123";
 const shared = {
@@ -63,7 +66,7 @@ export default defineConfig({
           {
             name: "firefox",
             use: { browserName: "firefox" as const },
-            testMatch: [CROSS_OS, DEVICE, MOTION, GUIDE, TOUR, PERMISSIONS],
+            testMatch: [CROSS_OS, DEVICE, MOTION, GUIDE, TOUR, PERMISSIONS, FILE_DROP],
           },
         ]
       : []),
@@ -72,7 +75,7 @@ export default defineConfig({
           {
             name: "webkit",
             use: { browserName: "webkit" as const },
-            testMatch: [CROSS_OS, DEVICE, MOTION, GUIDE, TOUR, PERMISSIONS],
+            testMatch: [CROSS_OS, DEVICE, MOTION, GUIDE, TOUR, PERMISSIONS, FILE_DROP],
           },
         ]
       : []),

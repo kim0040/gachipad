@@ -1,15 +1,27 @@
-import { MAX_FILES_PER_SHARE } from "@gachipad/shared";
+import { MAX_FILES_PER_SHARE, MAX_PATH_LENGTH } from "@gachipad/shared";
 import { strToU8, zipSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { addFile, fileText, readFiles, setFileLanguage } from "../../lib/collab/model";
-import { excludedFolderIn, isJunkFile } from "./dropped-files";
+import {
+  excludedFolderIn,
+  isJunkFile,
+  MAX_COLLECTED_FILES,
+  MAX_WALKED_ENTRIES,
+} from "./dropped-files";
 import {
   decodeText,
   importFiles,
+  MAX_DROP_INPUT_BYTES,
+  MAX_DROP_TEXT_BYTES,
   MAX_FILE_BYTES,
+  MAX_ZIP_BYTES,
+  MAX_ZIP_ENTRIES,
   MAX_ZIP_FILES,
+  MAX_ZIP_UNPACKED_BYTES,
   normalizeImportPath,
+  readForNewShare,
+  zipEntryCount,
 } from "./import-files";
 
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -32,6 +44,42 @@ describe("decodeText", () => {
 
   it("skips binary files", () => {
     expect(decodeText(bytes(0x50, 0x4b, 0x03, 0x04, 0x00, 0x00))).toBeNull();
+  });
+
+  it("skips binary with no NUL in it instead of decoding it into replacement characters", () => {
+    // Neither UTF-8 nor EUC-KR: 0xff starts no character in either.
+    expect(decodeText(bytes(0xff, 0xfd, 0xff, 0xfd))).toBeNull();
+    // A lead byte of EUC-KR with no valid second byte.
+    expect(decodeText(bytes(0xc7, 0x20, 0xc7, 0x20))).toBeNull();
+    // Valid UTF-8, but nothing a text file is made of.
+    expect(decodeText(bytes(0x01, 0x02, 0x03, 0x04))).toBeNull();
+  });
+
+  it("knows common formats by their first bytes, with or without a NUL", () => {
+    expect(decodeText(bytes(0xff, 0xd8, 0xff, 0xe0, 0x41))).toBeNull();
+    expect(decodeText(strToU8("%PDF-1.7\nhello"))).toBeNull();
+    expect(decodeText(strToU8("GIF89a hello"))).toBeNull();
+    expect(decodeText(bytes(0x1f, 0x8b, 0x08, 0x41))).toBeNull();
+  });
+
+  it("skips broken UTF-16: half a character at the end, or half a surrogate pair", () => {
+    expect(decodeText(bytes(0xff, 0xfe, 0x68, 0, 0x69))).toBeNull();
+    expect(decodeText(bytes(0xff, 0xfe, 0x00, 0xd8, 0x41, 0))).toBeNull();
+    expect(decodeText(bytes(0xfe, 0xff, 0xd8, 0x00, 0, 0x41))).toBeNull();
+  });
+
+  it("keeps real text in legacy Korean, and the control characters text really has", () => {
+    // "한글 test" and a CRLF in CP949.
+    expect(decodeText(bytes(0xc7, 0xd1, 0xb1, 0xdb, 0x20, 0x74, 0x0d, 0x0a))).toBe("한글 t\n");
+    expect(decodeText(strToU8("a\tb\fc\u001b[0m\n"))).toBe("a\tb\fc\u001b[0m\n");
+    // One stray control character in a long text does not make it binary.
+    expect(decodeText(strToU8(`${"text ".repeat(100)}\u0001`))).not.toBeNull();
+  });
+
+  it("treats a NUL anywhere as binary, not just in the first bytes", () => {
+    const text = new Uint8Array(20_000).fill(97);
+    text[19_000] = 0;
+    expect(decodeText(text)).toBeNull();
   });
 });
 
@@ -241,7 +289,10 @@ describe("the share's size limit", () => {
   it("adds files until the room is used up, then names what did not fit", async () => {
     const doc = shareWith({ "a.txt": "a" });
     const room = Y.encodeStateAsUpdate(doc).byteLength;
-    const content = "x".repeat(2000);
+    // Large enough that a limit of this size keeps the full 16 KB free for typing.
+    const size = 60_000;
+    const limit = 16 * 1024 + room + 2 * size + 700;
+    const content = "x".repeat(size);
     const result = await importFiles(
       doc,
       [
@@ -250,12 +301,12 @@ describe("the share's size limit", () => {
         new File([content], "three.txt"),
       ],
       // Room for the 16 KB kept free for typing, the document, and a little over two files.
-      { maxDocBytes: () => 16 * 1024 + room + 2 * 2000 + 700 },
+      { maxDocBytes: () => limit },
     );
     expect(result.addedPaths).toEqual(["one.txt", "two.txt"]);
     expect(result.skipped).toEqual([{ name: "three.txt", reason: "shareFull" }]);
     // What was applied fits: the update the server would measure stays under the limit.
-    expect(Y.encodeStateAsUpdate(doc).byteLength).toBeLessThan(16 * 1024 + room + 2 * 2000 + 700);
+    expect(Y.encodeStateAsUpdate(doc).byteLength).toBeLessThan(limit);
   });
 
   it("adds nothing, and says so, when even the first file does not fit", async () => {
@@ -339,6 +390,257 @@ describe("excluded folders", () => {
       { name: "proj/node_modules", reason: "excludedFolder" },
       { name: "proj/.git", reason: "excludedFolder" },
     ]);
+  });
+});
+
+describe("the document is checked again after reading", () => {
+  it("applies nothing to a document that was replaced while the files were read", async () => {
+    const doc = shareWith({ "a.txt": "a" });
+    let finishRead = () => {};
+    const file = new File(["late"], "late.txt");
+    Object.defineProperty(file, "arrayBuffer", {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          finishRead = () => resolve(new TextEncoder().encode("late").buffer as ArrayBuffer);
+        }),
+    });
+    let current = true;
+    const pending = importFiles(doc, [file], { isCurrent: () => current });
+    await vi.waitFor(() => expect(finishRead).not.toEqual(expect.any(Number)));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    current = false;
+    finishRead();
+    const result = await pending;
+    expect(result.stale).toBe(true);
+    expect(result.added).toBe(0);
+    expect(result.firstId).toBeNull();
+    expect(texts(doc)).toEqual({ "a.txt": "a" });
+  });
+});
+
+describe("names in NFC", () => {
+  const nfc = "과제1.py";
+  const nfd = nfc.normalize("NFD");
+
+  it("puts a path from macOS in NFC", () => {
+    expect(nfd).not.toBe(nfc);
+    expect(normalizeImportPath(`폴더/${nfd}`.normalize("NFD"))).toBe(`폴더/${nfc}`);
+  });
+
+  it("counts length on the NFC name, the one the share keeps", () => {
+    const long = "가".repeat(MAX_PATH_LENGTH);
+    expect(long.normalize("NFD").length).toBeGreaterThan(MAX_PATH_LENGTH);
+    expect(normalizeImportPath(long.normalize("NFD"))).toBe(long);
+  });
+
+  it("sees the same name and text from macOS as the same file", async () => {
+    const doc = shareWith({ [nfc]: "x" });
+    const result = await importFiles(doc, [new File(["x"], nfd)]);
+    expect(result.added).toBe(0);
+    expect(result.duplicates).toEqual([nfc]);
+    expect(readFiles(doc)).toHaveLength(1);
+  });
+
+  it("numbers different text under the same name instead of adding a look-alike", async () => {
+    const doc = shareWith({ [nfc]: "x" });
+    const result = await importFiles(doc, [new File(["y"], nfd)]);
+    expect(result.addedPaths).toEqual(["과제1 (2).py"]);
+  });
+
+  it("matches a name already stored in NFD by an older version", async () => {
+    const doc = shareWith({ [nfd]: "x" });
+    const same = await importFiles(doc, [new File(["x"], nfc)]);
+    expect(same.added).toBe(0);
+    const other = await importFiles(doc, [new File(["y"], nfc)]);
+    expect(other.addedPaths).toEqual(["과제1 (2).py"]);
+  });
+});
+
+describe("the final path", () => {
+  it("skips a file whose number would make its path longer than a share allows", async () => {
+    const path = `${"a".repeat(MAX_PATH_LENGTH - 3)}.py`;
+    const doc = shareWith({ [path]: "x" });
+    const result = await importFiles(doc, [new File(["y"], path)]);
+    expect(result.added).toBe(0);
+    expect(result.skipped).toEqual([{ name: path, reason: "badPath" }]);
+    expect(readFiles(doc)).toHaveLength(1);
+  });
+});
+
+describe("a small share size limit", () => {
+  it("still takes what fits: the room kept for typing shrinks with the limit", async () => {
+    const doc = emptyShare();
+    const used = Y.encodeStateAsUpdate(doc).byteLength;
+    // Far under the 16 KiB a large share keeps free, and all of it fits this limit.
+    const limit = 8192;
+    expect(used).toBeLessThan(limit / 2);
+    const result = await importFiles(doc, [new File(["print(1)\n"], "main.py")], {
+      maxDocBytes: () => limit,
+    });
+    expect(result.addedPaths).toEqual(["main.py"]);
+  });
+
+  it("still refuses what does not fit it", async () => {
+    const limit = 8192;
+    const result = await importFiles(emptyShare(), [new File(["x".repeat(limit)], "big.txt")], {
+      maxDocBytes: () => limit,
+    });
+    expect(result.added).toBe(0);
+    expect(result.skipped).toEqual([{ name: "big.txt", reason: "shareFull" }]);
+  });
+});
+
+describe("what a big drop costs before it is read", () => {
+  /** A file that says how large it is, and counts how often it was really read. */
+  function sized(name: string, size: number, content: Uint8Array = new Uint8Array(0)) {
+    const file = new File([content as BlobPart], name);
+    const read = vi.fn(async () => content.buffer as ArrayBuffer);
+    Object.defineProperty(file, "size", { value: size });
+    Object.defineProperty(file, "arrayBuffer", { value: read });
+    return { file, read };
+  }
+
+  it("does not read a .zip over the size limit", async () => {
+    const { file, read } = sized("huge.zip", MAX_ZIP_BYTES + 1);
+    const result = await importFiles(shareWith({}), [file]);
+    expect(read).not.toHaveBeenCalled();
+    expect(result.skipped).toEqual([{ name: "huge.zip", reason: "zipTooBig" }]);
+  });
+
+  it("stops reading once the drop's input budget is used, across archives", async () => {
+    const empty = zipSync({});
+    const zips = Array.from({ length: 5 }, (_, n) => sized(`z${n}.zip`, MAX_ZIP_BYTES, empty));
+    const result = await importFiles(
+      shareWith({}),
+      zips.map((zip) => zip.file),
+    );
+    const allowed = Math.floor(MAX_DROP_INPUT_BYTES / MAX_ZIP_BYTES);
+    expect(zips.filter((zip) => zip.read.mock.calls.length > 0)).toHaveLength(allowed);
+    expect(result.skipped.filter((skip) => skip.reason === "dropTooBig")).toHaveLength(
+      zips.length - allowed,
+    );
+  });
+
+  it("does not read loose files past what a drop may hold as text", async () => {
+    const count = Math.ceil(MAX_DROP_TEXT_BYTES / MAX_FILE_BYTES) + 3;
+    const body = new Uint8Array(MAX_FILE_BYTES).fill(97);
+    const files = Array.from({ length: count }, (_, n) => {
+      const file = new File([body], `f${n}.txt`);
+      return { file, read: vi.spyOn(file, "arrayBuffer") };
+    });
+    // A share with no room, so the test holds no document of this size.
+    const result = await importFiles(
+      shareWith({}),
+      files.map((entry) => entry.file),
+      { maxDocBytes: () => 1 },
+    );
+    const allowed = Math.floor(MAX_DROP_TEXT_BYTES / MAX_FILE_BYTES);
+    expect(files.filter((entry) => entry.read.mock.calls.length > 0)).toHaveLength(allowed);
+    expect(result.skipped.filter((skip) => skip.reason === "dropTooBig")).toHaveLength(
+      count - allowed,
+    );
+  });
+
+  it("decides dependency folders and junk from the name, without reading them", async () => {
+    const paths = ["node_modules/dep/index.js", "src/.DS_Store", "__MACOSX/a", ".venv/bin/python"];
+    const picked = paths.map((path) => {
+      const file = inFolder(path);
+      return { file, read: vi.spyOn(file, "arrayBuffer") };
+    });
+    const result = await importFiles(
+      shareWith({}),
+      picked.map((entry) => entry.file),
+    );
+    for (const { read } of picked) expect(read).not.toHaveBeenCalled();
+    expect(result.added).toBe(0);
+  });
+
+  it("caps a picked folder like a dropped one: files read, then entries looked at", async () => {
+    const files = Array.from({ length: MAX_COLLECTED_FILES + 5 }, (_, n) => {
+      const file = inFolder(`p/f${n}.txt`, `${n}`);
+      return { file, read: vi.spyOn(file, "arrayBuffer") };
+    });
+    const capped = await importFiles(
+      shareWith({}),
+      files.map((entry) => entry.file),
+    );
+    expect(files.filter((entry) => entry.read.mock.calls.length > 0)).toHaveLength(
+      MAX_COLLECTED_FILES,
+    );
+    expect(capped.skipped).toContainEqual({ name: "", reason: "tooMany", count: 5 });
+
+    const junk = Array.from({ length: MAX_WALKED_ENTRIES + 5 }, () => inFolder("p/.DS_Store"));
+    const stopped = await importFiles(shareWith({}), junk);
+    expect(stopped.skipped).toEqual([{ name: "", reason: "notChecked", count: 0 }]);
+  });
+});
+
+describe("reading for a new share", () => {
+  const texts = (files: File[]) =>
+    Promise.all(
+      files.map(async (file) => [
+        (file as File & { gachipadPath?: string }).gachipadPath,
+        await file.text(),
+      ]),
+    );
+
+  it("turns what the server would not take into normalised UTF-8", async () => {
+    const utf16 = new File([bytes(0xff, 0xfe, 0x68, 0, 0x69, 0, 0x0d, 0, 0x0a, 0)], "wide.py");
+    const cp949 = new File([bytes(0xc7, 0xd1, 0xb1, 0xdb)], "old.c");
+    const bom = new File(["\ufeffa\r\nb\r\n"], "win.py");
+    const { files } = await readForNewShare([utf16, cp949, bom]);
+    expect(Object.fromEntries(await texts(files))).toEqual({
+      "wide.py": "hi\n",
+      "old.c": "한글",
+      "win.py": "a\nb\n",
+    });
+  });
+
+  it("gives the same skips, numbers and duplicates as adding to an open share", async () => {
+    const { files, result } = await readForNewShare(
+      [
+        inFolder("p/a.py", "one"),
+        new File(["one"], "a.py"),
+        inFolder("p/a.py", "two"),
+        inFolder("p/a.py", "one"),
+        new File([bytes(0, 1, 2)], "image.bin"),
+        inFolder("p/node_modules/dep/index.js"),
+      ],
+      { skipped: [{ name: "locked.txt", reason: "unreadable" }] },
+    );
+    expect(Object.fromEntries(await texts(files))).toEqual({
+      "p/a.py": "one",
+      "a.py": "one",
+      "p/a (2).py": "two",
+    });
+    expect(result.duplicates).toEqual(["p/a.py"]);
+    expect(result.renamed).toEqual([{ from: "p/a.py", to: "p/a (2).py" }]);
+    expect(result.skipped).toEqual([
+      { name: "locked.txt", reason: "unreadable" },
+      { name: "image.bin", reason: "binary" },
+      { name: "p/node_modules", reason: "excludedFolder" },
+    ]);
+  });
+
+  it("filters before it counts: text files among many binaries make a share", async () => {
+    const text = Array.from({ length: 15 }, (_, n) => new File([`${n}`], `f${n}.py`));
+    const images = Array.from(
+      { length: MAX_FILES_PER_SHARE },
+      (_, n) => new File([bytes(0, n)], `i${n}.png`),
+    );
+    const { files, result } = await readForNewShare([...text, ...images]);
+    expect(files).toHaveLength(text.length);
+    expect(result.skipped).toHaveLength(images.length);
+  });
+
+  it("leaves out what would go over the share's limit", async () => {
+    const limit = 8192;
+    const { files, result } = await readForNewShare(
+      [new File(["small"], "small.txt"), new File(["x".repeat(limit)], "big.txt")],
+      { maxDocBytes: () => limit },
+    );
+    expect(files.map((file) => file.name)).toEqual(["small.txt"]);
+    expect(result.skipped).toEqual([{ name: "big.txt", reason: "shareFull" }]);
   });
 });
 
@@ -426,6 +728,179 @@ describe("zip files", () => {
     const result = await importFiles(doc, [zip(entries)]);
     expect(result.skipped.some((skip) => skip.reason === "zipTooBig")).toBe(true);
     expect(result.added).toBeLessThan(9);
+  });
+
+  describe("that lie about themselves", () => {
+    interface RawEntry {
+      name: string;
+      /** What the local record holds. */
+      data?: Uint8Array;
+      /** The sizes the directory declares, and where it says the data is. */
+      size?: number;
+      original?: number;
+      method?: number;
+      sameDataAs?: number;
+    }
+
+    /** An archive written by hand, so its directory can say what a real tool never would. */
+    function rawZip(entries: RawEntry[], declaredCount = entries.length): Uint8Array {
+      const parts: Uint8Array[] = [];
+      let offset = 0;
+      const push = (part: Uint8Array) => {
+        parts.push(part);
+        offset += part.length;
+      };
+      const record = (length: number, write: (view: DataView) => void) => {
+        const part = new Uint8Array(length);
+        write(new DataView(part.buffer));
+        return part;
+      };
+      const located = entries.map((entry) => {
+        if (entry.sameDataAs !== undefined) return undefined;
+        const at = offset;
+        const name = strToU8(entry.name);
+        const data = entry.data ?? new Uint8Array(0);
+        push(
+          record(30, (view) => {
+            view.setUint32(0, 0x04034b50, true);
+            view.setUint16(8, entry.method ?? 0, true);
+            view.setUint32(18, data.length, true);
+            view.setUint32(22, data.length, true);
+            view.setUint16(26, name.length, true);
+          }),
+        );
+        push(name);
+        push(data);
+        return at;
+      });
+      const directory = offset;
+      entries.forEach((entry, index) => {
+        const name = strToU8(entry.name);
+        const data = entry.data ?? entries[entry.sameDataAs ?? -1]?.data ?? new Uint8Array(0);
+        const at = located[entry.sameDataAs ?? index] ?? 0;
+        push(
+          record(46, (view) => {
+            view.setUint32(0, 0x02014b50, true);
+            view.setUint16(10, entry.method ?? 0, true);
+            view.setUint32(20, entry.size ?? data.length, true);
+            view.setUint32(24, entry.original ?? data.length, true);
+            view.setUint16(28, name.length, true);
+            view.setUint32(42, at, true);
+          }),
+        );
+        push(name);
+      });
+      const size = offset - directory;
+      push(
+        record(22, (view) => {
+          view.setUint32(0, 0x06054b50, true);
+          view.setUint16(8, declaredCount, true);
+          view.setUint16(10, declaredCount, true);
+          view.setUint32(12, size, true);
+          view.setUint32(16, directory, true);
+        }),
+      );
+      const all = new Uint8Array(offset);
+      let at = 0;
+      for (const part of parts) {
+        all.set(part, at);
+        at += part.length;
+      }
+      return all;
+    }
+
+    const asFile = (data: Uint8Array) => new File([data as BlobPart], "pack.zip");
+
+    it("reads the archive it writes, so the rest of these mean something", async () => {
+      const data = rawZip([{ name: "ok.txt", data: strToU8("fine") }]);
+      expect(zipEntryCount(data)).toBe(1);
+      const result = await importFiles(shareWith({}), [asFile(data)]);
+      expect(result.addedPaths).toEqual(["ok.txt"]);
+    });
+
+    it("refuses a stored entry whose two sizes differ, and keeps the honest ones", async () => {
+      const payload = new Uint8Array(1024).fill(97);
+      const data = rawZip([
+        { name: "evil.txt", data: payload, original: 4 },
+        { name: "ok.txt", data: strToU8("fine") },
+      ]);
+      const result = await importFiles(shareWith({}), [asFile(data)]);
+      expect(result.addedPaths).toEqual(["ok.txt"]);
+      expect(result.skipped).toEqual([{ name: "evil.txt", reason: "unreadable" }]);
+    });
+
+    it("counts the larger size of an entry, so a small original cannot hide a big copy", async () => {
+      const payload = new Uint8Array(MAX_FILE_BYTES + 1).fill(97);
+      const data = rawZip([{ name: "big.txt", data: payload, method: 8, original: 4 }]);
+      const result = await importFiles(shareWith({}), [asFile(data)]);
+      expect(result.added).toBe(0);
+      expect(result.skipped).toEqual([{ name: "big.txt", reason: "tooBig" }]);
+    });
+
+    it("pays for each entry that points at the same bytes", async () => {
+      const payload = new Uint8Array(MAX_FILE_BYTES).fill(97);
+      const count = Math.floor(MAX_ZIP_UNPACKED_BYTES / MAX_FILE_BYTES);
+      const entries: RawEntry[] = [{ name: "f0.txt", data: payload }];
+      for (let n = 1; n < count + 4; n++) entries.push({ name: `f${n}.txt`, sameDataAs: 0 });
+      // A share with no room, so the test holds no document of this size.
+      const result = await importFiles(shareWith({}), [asFile(rawZip(entries))], {
+        maxDocBytes: () => 1,
+      });
+      expect(result.skipped.filter((skip) => skip.reason === "shareFull")).toHaveLength(count);
+      expect(result.skipped).toContainEqual({ name: "pack.zip", reason: "zipTooBig" });
+    });
+
+    it("refuses a count larger than the archive can hold, without looping over it", async () => {
+      const forged = rawZip([{ name: "a.txt", data: strToU8("a") }], 0xffff);
+      expect(zipEntryCount(forged)).toBeNull();
+      const result = await importFiles(shareWith({}), [asFile(forged)]);
+      expect(result.skipped).toEqual([{ name: "pack.zip", reason: "zipBad" }]);
+    });
+
+    it("refuses a forged ZIP64 count, the one that reaches four billion", async () => {
+      const plain = rawZip([{ name: "a.txt", data: strToU8("a") }]);
+      const end = plain.length - 22;
+      const forged = new Uint8Array(plain.length + 56 + 20);
+      forged.set(plain.subarray(0, end));
+      const view = new DataView(forged.buffer);
+      view.setUint32(end, 0x06064b50, true);
+      view.setUint32(end + 32, 0xffffffff, true);
+      view.setUint32(end + 56, 0x07064b50, true);
+      view.setUint32(end + 64, end, true);
+      forged.set(plain.subarray(end), end + 76);
+      expect(zipEntryCount(forged)).toBeNull();
+      const result = await importFiles(shareWith({}), [asFile(forged)]);
+      expect(result.skipped).toEqual([{ name: "pack.zip", reason: "zipBad" }]);
+    });
+
+    it("does not open an archive that really lists too many entries", async () => {
+      const entries = Array.from({ length: MAX_ZIP_ENTRIES + 1 }, (_, n) => ({ name: `f${n}` }));
+      const data = rawZip(entries);
+      expect(zipEntryCount(data)).toBe(entries.length);
+      const result = await importFiles(shareWith({}), [asFile(data)]);
+      expect(result.added).toBe(0);
+      expect(result.skipped).toEqual([{ name: "pack.zip", reason: "zipTooMany" }]);
+    });
+
+    it("holds the drop's text budget across several archives", async () => {
+      const chunk = new Uint8Array(MAX_FILE_BYTES).fill(97);
+      const count = Math.floor(MAX_ZIP_UNPACKED_BYTES / MAX_FILE_BYTES);
+      const archive = (id: number) => {
+        const entries: Record<string, Uint8Array> = {};
+        for (let n = 0; n < count; n++) entries[`z${id}/f${n}.txt`] = chunk;
+        return new File([zipSync(entries, { level: 0 })], `z${id}.zip`);
+      };
+      const archives = Math.ceil(MAX_DROP_TEXT_BYTES / (count * MAX_FILE_BYTES)) + 1;
+      const result = await importFiles(
+        shareWith({}),
+        Array.from({ length: archives }, (_, id) => archive(id)),
+        { maxDocBytes: () => 1 },
+      );
+      const taken = result.skipped.filter((skip) => skip.reason === "shareFull").length;
+      expect(taken).toBeLessThanOrEqual(Math.floor(MAX_DROP_TEXT_BYTES / MAX_FILE_BYTES));
+      expect(taken).toBeGreaterThan(count);
+      expect(result.skipped.map((skip) => skip.reason)).toContain("zipTooBig");
+    });
   });
 
   it("reports an archive that cannot be read", async () => {

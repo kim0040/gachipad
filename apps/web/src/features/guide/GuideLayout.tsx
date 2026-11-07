@@ -41,6 +41,9 @@ export function GuideLayout() {
       expiryHours: publicSettings?.anonymousTtlHours ?? DEFAULT_GUIDE_SETTINGS.expiryHours,
       historyDays: publicSettings?.historyRetentionDays ?? DEFAULT_GUIDE_SETTINGS.historyDays,
       uploadMB: publicSettings?.maxUploadMB ?? DEFAULT_GUIDE_SETTINGS.uploadMB,
+      docMB: publicSettings
+        ? Math.round((publicSettings.maxDocBytes / (1024 * 1024)) * 10) / 10
+        : DEFAULT_GUIDE_SETTINGS.docMB,
     }),
     [publicSettings],
   );

@@ -17,6 +17,8 @@ export const GLIDE_MAX_LINES = 1.5;
 export const GLIDE_MAX_X_PX = 160;
 /** How close the pointer must be to a caret, either side, to show that person's name. */
 export const CARET_HIT_SLOP_PX = 5;
+/** A flag above a caret needs this much of the visible editor over the caret, or it hangs below. */
+export const FLAG_ROOM_PX = 22;
 
 export function nextCrowded(crowded: boolean, people: number): boolean {
   return crowded ? people > CROWD_LEAVE_PEOPLE : people >= CROWD_ENTER_PEOPLE;
@@ -73,6 +75,26 @@ export function isPinned(mode: RemoteCursorMode, crowded: boolean, role: PeerRol
 export function flashesName(mode: RemoteCursorMode, crowded: boolean, lines: number): boolean {
   if (mode === "carets" || mode === "always") return false;
   return densityOf(mode, crowded) === "crowded" ? lines <= NEAR_CURSOR_LINES : true;
+}
+
+/**
+ * How far a peer is from my main cursor in the distance `NEAR_CURSOR_LINES` means. A long wrapped
+ * line is one line of the document and many on the screen, so rows on the screen count when both
+ * carets are drawn; the document's lines when mine is not.
+ */
+export function linesApart(
+  documentLines: number,
+  peerY: number,
+  myY: number | null,
+  lineHeight: number,
+): number {
+  if (myY === null || lineHeight <= 0) return documentLines;
+  return Math.round(Math.abs(peerY - myY) / lineHeight);
+}
+
+/** Whether a caret's flag would be clipped above the visible part of the editor. */
+export function flagHangsBelow(y: number, scrollTop: number): boolean {
+  return y - scrollTop < FLAG_ROOM_PX;
 }
 
 export interface DrawnCaret {

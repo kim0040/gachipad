@@ -56,7 +56,7 @@ export function FeaturesPage() {
           <P>
             {t("guide.features.files.body3", {
               upload: settings.uploadMB,
-              doc: FACTS.defaultDocMB,
+              doc: settings.docMB,
             })}
           </P>
         </Split>

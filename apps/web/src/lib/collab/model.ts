@@ -189,7 +189,9 @@ export function buildTree(files: readonly FileEntry[]): TreeNode[] {
     parts.forEach((part, index) => {
       const path = parts.slice(0, index + 1).join("/");
       const isFile = index === parts.length - 1;
-      let child = node.children.find((c) => c.name === part && (isFile ? c.file : !c.file));
+      // Folders merge. Files never do: two people can add the same path at the same moment, and
+      // both files must stay visible so either can be opened or renamed.
+      let child = isFile ? undefined : node.children.find((c) => c.name === part && !c.file);
       if (!child) {
         child = isFile
           ? { name: part, path, file, children: [] }
@@ -213,15 +215,16 @@ export function newCommentId(): string {
   return crypto.randomUUID();
 }
 
+/** Compared in NFC: older shares can hold names from macOS (NFD) that look the same. */
 export function uniquePath(files: readonly FileEntry[], wanted: string): string {
-  const taken = new Set(files.map((file) => file.path));
-  if (!taken.has(wanted)) return wanted;
+  const taken = new Set(files.map((file) => file.path.normalize("NFC")));
+  if (!taken.has(wanted.normalize("NFC"))) return wanted;
   const dot = wanted.lastIndexOf(".");
   const slash = wanted.lastIndexOf("/");
   const stem = dot > slash + 1 ? wanted.slice(0, dot) : wanted;
   const ext = dot > slash + 1 ? wanted.slice(dot) : "";
   for (let n = 2; ; n++) {
     const candidate = `${stem} (${n})${ext}`;
-    if (!taken.has(candidate)) return candidate;
+    if (!taken.has(candidate.normalize("NFC"))) return candidate;
   }
 }

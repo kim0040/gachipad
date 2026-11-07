@@ -3,6 +3,7 @@ export const DROP_TIP_STORAGE_KEY = "gachipad.tip.drop";
 
 /** Done in this page's lifetime; the only memory there is when storage is blocked. */
 let doneHere = false;
+const listeners = new Set<() => void>();
 
 function storedDone(): boolean {
   try {
@@ -25,6 +26,20 @@ export function markDropTipDone(): void {
   } catch {
     // Not persisted: it can show again next visit, once.
   }
+  for (const listener of listeners) listener();
+}
+
+/** Follows the mark, set in this tab or in another one. */
+export function subscribeDropTip(listener: () => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === DROP_TIP_STORAGE_KEY || event.key === null) listener();
+  };
+  listeners.add(listener);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
 }
 
 /** Forgets what this page remembered (tests). */
@@ -73,7 +88,7 @@ export function dropTipUsesButton(device: { touchOnly: boolean; narrow: boolean 
 }
 
 /**
- * Whether a file count that changed after the tip settled means a file was added. The baseline
+ * Whether a file count that changed once the document was in means a file was added. The baseline
  * follows the count down (a deleted file is not "undone" by the next addition).
  */
 export function fileWasAdded(baseline: number, count: number): boolean {

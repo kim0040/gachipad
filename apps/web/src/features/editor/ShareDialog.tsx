@@ -67,6 +67,7 @@ export function ShareDialog() {
           title={t("share.dialog.title")}
           description={t("share.dialog.description")}
           closeLabel={t("common.close")}
+          data-file-drop-modal=""
         >
           <Tabs value={current} onValueChange={(value) => setCurrent(value as Tab)}>
             <TabsList aria-label={t("share.dialog.title")}>

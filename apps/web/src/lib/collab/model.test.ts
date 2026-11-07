@@ -55,6 +55,14 @@ describe("uniquePath", () => {
 });
 
 describe("buildTree", () => {
+  it("keeps both files when two have the same path, so either can be opened", () => {
+    const entry = (id: string, path: string) => ({ id, path, language: "text", order: 0 });
+    const tree = buildTree([entry("a", "src/same.py"), entry("b", "src/same.py"), entry("c", "x")]);
+    const folder = tree.find((node) => node.name === "src");
+    expect(tree.filter((node) => node.name === "src")).toHaveLength(1);
+    expect(folder?.children.map((node) => node.file?.id).sort()).toEqual(["a", "b"]);
+  });
+
   it("lists folders before files, each sorted by name", () => {
     const tree = buildTree([
       file("z.ts"),

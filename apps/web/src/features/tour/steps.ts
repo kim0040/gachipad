@@ -24,14 +24,6 @@ export interface StepContext {
   touchOnly: boolean;
 }
 
-/** Touch-only devices (a phone, a tablet without a mouse), as the pointer media queries report them. */
-export function isTouchOnly(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(hover: none) and (pointer: coarse)").matches
-  );
-}
-
 /** The text of a step for this person on this device. */
 export function bodyOf(step: TourStep, { limited, touchOnly }: StepContext): MessageKey {
   if (limited && step.limitedBody) return step.limitedBody;

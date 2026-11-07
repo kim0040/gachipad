@@ -81,10 +81,10 @@ export const guideEn = {
     "Drag files, folders or a .zip anywhere onto the share. An overlay covers the window, and dropping adds them right away. Dropped on the home page, they start a new share.",
   "guide.how.files.button.title": "The upload button",
   "guide.how.files.button.body":
-    "Where dragging is hard, such as on a phone, use Upload files in the more menu. You can pick files or a folder.",
+    "Where dragging is hard, such as on a phone, use Upload files in the more menu. You can pick files, and on a computer a whole folder too.",
   "guide.how.files.paste.title": "Copy and paste",
   "guide.how.files.paste.body":
-    "Files copied in your file manager or Finder are added when you paste them into the editor.",
+    "Files copied in your file manager or Finder are added when you paste them anywhere on the share page.",
   "guide.how.files.zip.title": ".zip files and folders",
   "guide.how.files.zip.body":
     "A .zip is unpacked with its folders kept, and a folder brings every file inside it. Folders such as .git, node_modules and __pycache__ are left out.",
@@ -93,7 +93,7 @@ export const guideEn = {
     "With the same name and the same content, nothing new is made and the existing file opens. With the same name and different content, the new one is added as main (2).py and the existing file is not touched.",
   "guide.how.files.skipped.title": "What is skipped",
   "guide.how.files.skipped.body":
-    "Files that are not text, files over {perFile} MB, more than {max} files at once, files that go over the share's size limit ({doc} MB) and files that cannot be read are skipped. A notice names each skipped file and says why.",
+    "Files that are not text, files over {perFile} MB, more than {max} files at once, files that go over the share's size limit ({doc} MB, set by this server's administrator) and files that cannot be read are skipped. A notice names each skipped file and says why.",
   "guide.how.files.viewer":
     "People who joined as viewers cannot add files, and dropping one tells them why.",
 
@@ -188,7 +188,7 @@ export const guideEn = {
     "Drop files, a folder or a .zip anywhere onto the page, or use Upload files in the more menu. System leftovers such as .DS_Store, Thumbs.db and __MACOSX are skipped, and Windows paths and line endings are tidied.",
   "guide.features.files.more": "More on adding files and what is skipped",
   "guide.features.files.body3":
-    "The administrator sets the size limits. By default one upload can be {upload} MB and the text of one share {doc} MB.",
+    "The administrator of each server sets the size limits. Here one upload can be {upload} MB and the text of one share {doc} MB.",
 
   "guide.features.history.title": "History and restore",
   "guide.features.history.body1":

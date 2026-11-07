@@ -18,20 +18,27 @@ export function visibleLines(view: EditorView): { fromLine: number; toLine: numb
 
 /**
  * Whether I moved the selection or edited. Text that came through Yjs carries `ySyncAnnotation`:
- * a remote edit, and also my own undo or redo, whose restored selection then follows as a plain
- * dispatch of its own and counts through that. Comparing relative positions cannot tell: they
- * anchor to the character after the cursor, so typing can leave them unchanged.
+ * a remote edit, and also my own undo or redo. Those two are told apart by the undo manager
+ * (`undoing`): it runs the change synchronously, and a restored selection cannot be relied on, as
+ * none follows an undo of text that went straight into the document, such as an imported file.
+ * Comparing relative positions cannot tell either: they anchor to the character after the cursor,
+ * so typing can leave them unchanged.
  */
-export function isLocalActivity(transactions: readonly Transaction[]): boolean {
+export function isLocalActivity(transactions: readonly Transaction[], undoing = false): boolean {
   return transactions.some(
-    (tr) => (tr.docChanged || tr.selection !== undefined) && !tr.annotation(ySyncAnnotation),
+    (tr) =>
+      (tr.docChanged || tr.selection !== undefined) && (undoing || !tr.annotation(ySyncAnnotation)),
   );
 }
 
 /** Per session, not per view: reopening a file must not look to the others like a new move. */
 const movedCounts = new WeakMap<DocSession, number>();
 
-export function awarenessBridge(session: DocSession, fileId: string) {
+export function awarenessBridge(
+  session: DocSession,
+  fileId: string,
+  undoManager: Pick<Y.UndoManager, "undoing" | "redoing">,
+) {
   return ViewPlugin.fromClass(
     class {
       private readonly onScroll: () => void;
@@ -48,7 +55,8 @@ export function awarenessBridge(session: DocSession, fileId: string) {
 
       update(update: ViewUpdate) {
         if (update.selectionSet || update.docChanged) {
-          this.sendCursor(isLocalActivity(update.transactions));
+          const undoing = undoManager.undoing || undoManager.redoing;
+          this.sendCursor(isLocalActivity(update.transactions, undoing));
         }
         if (update.geometryChanged || update.viewportChanged) this.sendViewport();
       }

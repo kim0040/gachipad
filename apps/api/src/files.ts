@@ -1,6 +1,9 @@
 import { MAX_PATH_LENGTH, NEARBY_PREVIEW_LINES } from "@gachipad/shared";
 
-/** Normalises an uploaded or client supplied path; null when it could escape its root. */
+/**
+ * Normalises an uploaded or client supplied path, into NFC so a name from macOS (NFD) is the same
+ * name as one typed elsewhere; null when it could escape its root.
+ */
 export function sanitizePath(path: string): string | null {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are rejected on purpose
   if (/[\u0000-\u001f]/.test(path)) return null;
@@ -10,7 +13,7 @@ export function sanitizePath(path: string): string | null {
     .filter((part) => part !== "" && part !== ".");
   if (parts.length === 0 || parts.some((part) => part === "..")) return null;
   if (/^[A-Za-z]:$/.test(parts[0] as string)) return null;
-  const clean = parts.join("/");
+  const clean = parts.join("/").normalize("NFC");
   return clean.length > MAX_PATH_LENGTH ? null : clean;
 }
 

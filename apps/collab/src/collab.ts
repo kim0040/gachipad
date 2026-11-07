@@ -729,8 +729,10 @@ export class Collab implements Extension<CollabContext> {
       // The controller: the owner, or the teacher in a lab (whose students own their copies).
       if (context(connection).controller) next.host = true;
       else delete next.host;
-      if (JSON.stringify(next).length > AWARENESS_MAX_STATE_BYTES) states.delete(yClientId);
-      else states.set(yClientId, next);
+      // In bytes: Korean text takes three per character on the wire.
+      if (Buffer.byteLength(JSON.stringify(next), "utf8") > AWARENESS_MAX_STATE_BYTES) {
+        states.delete(yClientId);
+      } else states.set(yClientId, next);
     }
     for (const yClientId of [...removedClients]) {
       if (!own.has(yClientId)) removedClients.delete(yClientId);

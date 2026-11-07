@@ -1,7 +1,7 @@
 import { Button, IconButton } from "@gachipad/ui";
 import { FileUp, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useIsNarrow } from "../../lib/appearance";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useDragCapable, useIsNarrow } from "../../lib/appearance";
 import { useT } from "../../lib/i18n";
 import { usePrefs } from "../../lib/prefs";
 import { useStore } from "../../lib/store";
@@ -13,10 +13,10 @@ import {
   fileWasAdded,
   markDropTipDone,
   showDropTip,
+  subscribeDropTip,
 } from "./drop-tip";
 import { ANY_DIALOG, useModalOpen } from "./modal-open";
 import { tourSeen } from "./seen";
-import { isTouchOnly } from "./steps";
 
 /** The editor settles for a moment before a hint comes in. */
 const SETTLE_MS = 2000;
@@ -32,35 +32,37 @@ export function DropTip() {
   const canAdd = useDocumentPermissions().files;
   const narrow = useIsNarrow();
   const prefs = usePrefs();
-  const [done, setDone] = useState(dropTipDone);
+  const dragCapable = useDragCapable();
+  const done = useSyncExternalStore(subscribeDropTip, dropTipDone, () => true);
   const [settled, setSettled] = useState(false);
   const [typed, setTyped] = useState(false);
   const root = useRef<HTMLElement>(null);
-  const baseline = useRef(ctx.files.length);
+  const baseline = useRef<number | null>(null);
   const length = useStore(ctx.info).length;
   const active = canAdd && !done;
   const dialogOpen = useModalOpen(active, ANY_DIALOG);
 
   useEffect(() => {
     if (!active) return;
-    const timer = window.setTimeout(() => {
-      baseline.current = ctx.files.length;
-      setSettled(true);
-    }, SETTLE_MS);
+    const timer = window.setTimeout(() => setSettled(true), SETTLE_MS);
     return () => window.clearTimeout(timer);
-  }, [active, ctx.files.length]);
+  }, [active]);
 
-  // The first file added by any means (dropped, uploaded, new, from a collaborator) ends the tip.
+  // The first file added by any means (new, from a collaborator) ends the tip, also before it
+  // shows; imports say so themselves, because the first one replaces the empty file and adds none.
+  // What arrives with the first sync was there already, so counting starts after it.
   const count = ctx.files.length;
+  const synced = ctx.state.synced;
   useEffect(() => {
-    if (!settled || done) return;
-    if (fileWasAdded(baseline.current, count)) {
+    if (done) return;
+    if (!synced) {
+      baseline.current = null;
+    } else if (baseline.current !== null && fileWasAdded(baseline.current, count)) {
       markDropTipDone();
-      setDone(true);
     } else {
       baseline.current = count;
     }
-  }, [settled, done, count]);
+  }, [synced, done, count]);
 
   // Only this person's own input counts: other people typing is no reason to hide a hint.
   useEffect(() => {
@@ -87,16 +89,30 @@ export function DropTip() {
     typed,
     settled,
   });
-  if (!visible) return null;
-
-  const useButton = dropTipUsesButton({ touchOnly: isTouchOnly(), narrow });
-  const dismiss = () => {
+  const viewRef = ctx.viewRef;
+  const dismiss = useCallback(() => {
     // Focus was on the tip, which is about to go: hand it back to the editor.
     const hadFocus = root.current?.contains(document.activeElement) ?? false;
     markDropTipDone();
-    setDone(true);
-    if (hadFocus) ctx.viewRef.current?.focus();
-  };
+    if (hadFocus) viewRef.current?.focus();
+  }, [viewRef]);
+
+  // Wherever focus is, and left for others to see too: Vim mode and the search panel use Escape.
+  useEffect(() => {
+    if (!visible) return;
+    // The Escape that closed the tour or a dialog can bring the tip in while it is still on its way
+    // to this listener: that one was not meant for the tip.
+    const shownAt = performance.now();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && event.timeStamp >= shownAt) dismiss();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible, dismiss]);
+
+  if (!visible) return null;
+
+  const useButton = dropTipUsesButton({ touchOnly: !dragCapable, narrow });
 
   // The button wording is for small screens: at the bottom, within reach and off the first lines.
   return (
@@ -117,7 +133,10 @@ export function DropTip() {
           <Button
             size="sm"
             className="mt-2"
-            onClick={() => ctx.openPanel("upload")}
+            onClick={() => {
+              markDropTipDone();
+              ctx.openPanel("upload");
+            }}
             data-testid="drop-tip-open"
           >
             {t("tour.dropTip.openAction")}

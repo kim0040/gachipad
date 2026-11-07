@@ -73,7 +73,8 @@ function normalizePath(raw: string): string {
     .split("/")
     .map((part) => part.trim())
     .filter((part) => part && part !== "." && part !== "..")
-    .join("/");
+    .join("/")
+    .normalize("NFC");
 }
 
 /** Add, rename and delete for files and folders, with the dialogs they need. */
