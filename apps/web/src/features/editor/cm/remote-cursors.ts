@@ -7,17 +7,19 @@ import type { DocSession } from "../../../lib/collab/session";
 import type { RemoteCursorMode } from "../../../lib/prefs";
 import {
   CARET_HIT_SLOP_PX,
+  type CrowdLevel,
   caretAt,
   type DrawnCaret,
   densityOf,
   flagHangsBelow,
   flashesName,
+  glidesIn,
   isPinned,
-  linesApart,
   movedChanged,
-  nextCrowded,
+  nextCrowdLevel,
   peopleOnFile,
   shouldGlide,
+  startedAfterQuiet,
 } from "./remote-cursor-rules";
 
 /**
@@ -26,7 +28,11 @@ import {
  * and the browser animates it on the compositor (60 fps, no layout). The name flag fades in when
  * a person really did something (their `moved` count changed), never because their caret was
  * pushed, redrawn or scrolled back into view, and out again when they go idle. A caret pushed by
- * text moves with that text; only a short move of the person's own glides.
+ * text moves with that text; only a short move of the person's own glides, and only while few
+ * people are on the file. In Auto mode the crowd level (few, busy, crowded; see
+ * remote-cursor-rules.ts) decides how much shows: with a busy file a name flashes only for
+ * someone who starts after a quiet spell, two at a time at most, and with a crowded file no name
+ * flashes by itself. Hover and the participant list always show a name.
  */
 
 export const refreshRemote = StateEffect.define<null>();
@@ -36,11 +42,11 @@ export const remoteCursorMode = Facet.define<RemoteCursorMode, RemoteCursorMode>
   combine: (values) => values[0] ?? "auto",
 });
 
-const setCrowded = StateEffect.define<boolean>();
-const crowdedField = StateField.define<boolean>({
-  create: () => false,
+const setCrowd = StateEffect.define<CrowdLevel>();
+const crowdField = StateField.define<CrowdLevel>({
+  create: () => "few",
   update(value, tr) {
-    for (const effect of tr.effects) if (effect.is(setCrowded)) return effect.value;
+    for (const effect of tr.effects) if (effect.is(setCrowd)) return effect.value;
     return value;
   },
 });
@@ -144,7 +150,7 @@ interface CaretLook {
   flashes: number;
   /** Flash the name now. */
   flash: boolean;
-  /** The person's own move, not text pushing the caret: a short one glides. */
+  /** The person's own move, not text pushing the caret, and the density lets it glide: a short one does. */
   active: boolean;
   /** The name stays on with no animation. */
   pinned: boolean;
@@ -368,7 +374,7 @@ function needsRedraw(update: import("@codemirror/view").ViewUpdate): boolean {
     update.viewportChanged ||
     update.geometryChanged ||
     update.startState.facet(remoteCursorMode) !== update.state.facet(remoteCursorMode) ||
-    update.startState.field(crowdedField) !== update.state.field(crowdedField) ||
+    update.startState.field(crowdField) !== update.state.field(crowdField) ||
     update.startState.field(spotlightField) !== update.state.field(spotlightField) ||
     update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshRemote)))
   );
@@ -427,6 +433,11 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
   // whose new position cannot be resolved yet (its text is still on the way) stays in `active`.
   const lastMoved = new Map<number, unknown>();
   const active = new Set<number>();
+  // When each person last did something, and who began since the last draw after a quiet spell.
+  const lastActivity = new Map<number, number>();
+  const started = new Set<number>();
+  // When the name flashed for each person stops showing; counts the names on screen.
+  const flashEnds = new Map<number, number>();
   const flashes = new Map<number, number>();
   let textChanged = false;
   let drawn: (DrawnCaret & { below: boolean })[] = [];
@@ -434,6 +445,18 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
   let hovered: number | null = null;
   // Escape hid this caret's name: it stays hidden until the pointer has left it.
   let dismissed: number | null = null;
+
+  // Where the pointer is now, not where it was when the caret came under it: a name opens only
+  // when the pointer itself moved onto the caret.
+  const stillHovered = (view: EditorView, base: { left: number; top: number }): number | null => {
+    if (hovered === null || !pointer) return null;
+    const hit = caretAt(
+      drawn,
+      (pointer.x - base.left) / view.scaleX,
+      (pointer.y - base.top) / view.scaleY,
+    );
+    return hit === hovered || overFlag(view, hovered) ? hovered : null;
+  };
 
   const hoverAt = (view: EditorView, base: { left: number; top: number }): number | null => {
     if (!pointer) return null;
@@ -472,37 +495,30 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
     markers(view) {
       const base = layerBase(view);
       const scrollTop = view.scrollDOM.scrollTop;
-      const { doc, selection } = view.state;
       const mode = view.state.facet(remoteCursorMode);
-      const crowded = view.state.field(crowdedField);
+      const level = view.state.field(crowdField);
+      const density = densityOf(mode, level);
       const spotlight = view.state.field(spotlightField);
       const following = (awareness?.getLocalState() as Partial<AwarenessState> | null)?.following;
       const pushedByText = textChanged;
       textChanged = false;
 
-      // Asked for at most once a draw, and only when someone's name depends on it.
-      let myY: number | null | undefined;
-      const mineAt = (): number | null => {
-        if (myY === undefined) {
-          const coords = view.coordsAtPos(selection.main.head);
-          myY = coords ? (coords.top - base.top) / view.scaleY : null;
-        }
-        return myY;
-      };
-
       const placed: {
         remote: Remote;
         caret: DrawnCaret & { below: boolean };
         wasActive: boolean;
+        began: boolean;
       }[] = [];
       for (const remote of remotesOf(view)) {
         const wasActive = active.delete(remote.awarenessId);
+        const began = started.delete(remote.awarenessId);
         const coords = view.coordsAtPos(remote.head, remote.head > remote.anchor ? -1 : 1);
         if (!coords) continue;
         const y = Math.round(((coords.top - base.top) / view.scaleY) * 10) / 10;
         placed.push({
           remote,
           wasActive,
+          began,
           caret: {
             id: remote.awarenessId,
             x: Math.round(((coords.left - base.left) / view.scaleX) * 10) / 10,
@@ -513,32 +529,28 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
         });
       }
       drawn = placed.map((entry) => entry.caret);
-      hovered = hoverAt(view, base);
+      hovered = hovered === null ? null : stillHovered(view, base);
 
-      const markers: KeyedMarker[] = placed.map(({ remote, caret, wasActive }) => {
-        const pinned = isPinned(mode, crowded, {
+      // Names still showing from an earlier flash, plus the ones granted in this draw.
+      const now = performance.now();
+      let namesShowing = 0;
+      for (const [id, end] of flashEnds) {
+        if (end > now) namesShowing++;
+        else flashEnds.delete(id);
+      }
+
+      const markers: KeyedMarker[] = placed.map(({ remote, caret, wasActive, began }) => {
+        const pinned = isPinned(mode, level, {
           presenter: remote.presenter,
           followed: remote.clientId === following,
           host: remote.host,
         });
         const spot = hovered === remote.awarenessId || spotlight === remote.clientId;
-        // The other person may be far outside the rendered text, and then only lines can tell.
-        const flash =
-          wasActive &&
-          !pinned &&
-          !spot &&
-          flashesName(
-            mode,
-            crowded,
-            densityOf(mode, crowded) === "crowded"
-              ? linesApart(
-                  Math.abs(doc.lineAt(remote.head).number - doc.lineAt(selection.main.head).number),
-                  caret.y,
-                  mineAt(),
-                  view.defaultLineHeight,
-                )
-              : 0,
-          );
+        const flash = wasActive && !pinned && !spot && flashesName(density, began, namesShowing);
+        if (flash) {
+          if (!flashEnds.has(remote.awarenessId)) namesShowing++;
+          flashEnds.set(remote.awarenessId, now + FLAG_VISIBLE_MS);
+        }
         const count = (flashes.get(remote.awarenessId) ?? 0) + (flash ? 1 : 0);
         if (flash) flashes.set(remote.awarenessId, count);
         return {
@@ -551,7 +563,7 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
             name: remote.name,
             flashes: count,
             flash,
-            active: wasActive && !pushedByText,
+            active: wasActive && !pushedByText && glidesIn(density),
             pinned,
             spot,
             quiet: mode === "carets",
@@ -573,10 +585,10 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const crowded = view.state.field(crowdedField);
-        const next = nextCrowded(crowded, countPeople());
+        const level = view.state.field(crowdField);
+        const next = nextCrowdLevel(level, countPeople());
         view.dispatch({
-          effects: [refreshRemote.of(null), ...(next === crowded ? [] : [setCrowded.of(next)])],
+          effects: [refreshRemote.of(null), ...(next === level ? [] : [setCrowd.of(next)])],
         });
       });
     };
@@ -590,6 +602,9 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
       for (const id of removed) {
         lastMoved.delete(id);
         active.delete(id);
+        lastActivity.delete(id);
+        started.delete(id);
+        flashEnds.delete(id);
         flashes.delete(id);
         if (dismissed === id) dismissed = null;
       }
@@ -597,13 +612,24 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
         if (id === awareness?.clientID) continue;
         const state = awareness?.getStates().get(id) as Partial<AwarenessState> | undefined;
         if (!state) continue;
-        if (state.fileId !== fileId) active.delete(id);
-        else if (movedChanged(lastMoved.get(id), state.moved)) active.add(id);
+        if (state.fileId !== fileId) {
+          active.delete(id);
+          lastActivity.delete(id);
+          started.delete(id);
+          flashEnds.delete(id);
+        } else if (movedChanged(lastMoved.get(id), state.moved)) {
+          active.add(id);
+          const now = performance.now();
+          if (startedAfterQuiet(lastActivity.get(id), now)) started.add(id);
+          lastActivity.set(id, now);
+        }
         lastMoved.set(id, state.moved);
       }
       schedule();
     };
     const onMouseMove = (event: MouseEvent) => {
+      // A browser may send a mousemove after layout changed under a resting pointer.
+      if (pointer && event.clientX === pointer.x && event.clientY === pointer.y) return;
       pointer = { x: event.clientX, y: event.clientY };
       if (hoverFrame) return;
       hoverFrame = requestAnimationFrame(() => {
@@ -663,10 +689,10 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
   });
 
   return [
-    crowdedField.init(() => nextCrowded(false, countPeople())),
+    crowdField.init(() => nextCrowdLevel("few", countPeople())),
     spotlightField,
-    EditorView.editorAttributes.compute([remoteCursorMode, crowdedField], (state) => ({
-      "data-remote-cursors": densityOf(state.facet(remoteCursorMode), state.field(crowdedField)),
+    EditorView.editorAttributes.compute([remoteCursorMode, crowdField], (state) => ({
+      "data-remote-cursors": densityOf(state.facet(remoteCursorMode), state.field(crowdField)),
     })),
     selections,
     carets,

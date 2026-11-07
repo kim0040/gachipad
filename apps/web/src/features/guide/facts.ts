@@ -38,8 +38,10 @@ export const FACTS = {
   defaultExpiryHours: defaults.anonymousTtlHours,
   /** Dropped or uploaded files: bigger than this is skipped (features/editor/import-files.ts). */
   importFileMB: 5,
-  /** At this many people in one file, the "auto" remote-cursor mode dims carets and hides most names. */
-  cursorCrowd: 6,
+  /** At this many people in one file, the "auto" remote-cursor mode fades selections and shows names briefly... */
+  cursorBusy: 4,
+  /** ...and at this many it dims carets and shows no name by itself. */
+  cursorCrowd: 8,
 } as const;
 
 /** Editor preferences (lib/prefs.ts). */

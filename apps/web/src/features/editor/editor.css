@@ -139,7 +139,10 @@
   will-change: transform;
 }
 
-/* A short move of the person's own; a caret pushed by text lands with that text. */
+/*
+ * A short move of the person's own while few people are on the file; a caret pushed by text lands
+ * with that text, and so does every move when the file is busy or crowded.
+ */
 .cm-remote-caret[data-glide] {
   /* Only transform animates: the compositor moves it, layout never reruns. */
   transition: transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -179,11 +182,21 @@
   opacity: 1;
 }
 
-/* Many people, or bars only: a person's selection should not cover the code they share. */
-.cm-editor[data-remote-cursors="crowded"] .cm-remote-selection,
+/*
+ * More people (Auto mode, by how many are on the file) or bars only: a person's selection should
+ * not cover the code they share. Busy and bars only 12%, crowded 8%, otherwise the 30% above.
+ * The forced-colors rule below comes last so it wins at equal specificity.
+ */
+.cm-editor[data-remote-cursors="busy"] .cm-remote-selection,
 .cm-editor[data-remote-cursors="carets"] .cm-remote-selection {
   background: color-mix(in srgb, var(--rc) 12%, transparent);
 }
+
+.cm-editor[data-remote-cursors="crowded"] .cm-remote-selection {
+  background: color-mix(in srgb, var(--rc) 8%, transparent);
+}
+
+/* Crowded only: the bars of people who are not pinned or highlighted dim too. */
 
 .cm-editor[data-remote-cursors="crowded"]
   .cm-remote-caret:not([data-pinned], [data-spot])

@@ -449,32 +449,140 @@ test("an idle client sends no cursor when someone else types", async ({ browser 
   }
 });
 
-test("a crowded file calms down: near flags only, the host pinned, hysteresis on the way out", async ({
+/** Moves the pointer onto a person's caret, as a real mouse move. */
+async function pointAtCaret(page: Page, name: string) {
+  const box = await caretOf(page, name).locator(".cm-remote-caret-bar").boundingBox();
+  if (!box) throw new Error("no caret box");
+  await page.mouse.move(box.x + 2, box.y + box.height / 2);
+}
+
+/** The participant list finds anyone: the avatar, or the "+N" list when there is no room for it. */
+async function hoverPerson(page: Page, name: string) {
+  const avatar = page.getByTestId("people").getByRole("button", { name: `Follow: ${name}` });
+  if (await avatar.count()) await avatar.hover();
+  else {
+    await page.getByTestId("people-more").click();
+    await page
+      .getByTestId("people-more-list")
+      .getByRole("button", { name: `Follow: ${name}` })
+      .hover();
+  }
+}
+
+const TINT_12 = / 0\.12\)$/;
+const TINT_8 = / 0\.08\)$/;
+
+test("a busy file: fainter selections, a name only for someone who starts, two at a time, no glide", async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const [host, observer, first, second, third] = (await room(browser, [
+    "Teacher",
+    "Watching",
+    "First",
+    "Second",
+    "Third",
+  ])) as [User, User, User, User, User];
+  try {
+    const page = observer.page;
+    const editor = page.locator(".cm-editor");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await goToLine(first, 3);
+    await goToLine(second, 6);
+    await goToLine(third, 9);
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(4);
+    await expect(editor).toHaveAttribute("data-remote-cursors", "busy");
+    for (const person of [first, second, third]) await expectFlagHidden(page, person.name);
+
+    // The share owner's name stays on, and only theirs; bars keep full strength.
+    await expect(caretOf(page, host.name)).toHaveAttribute("data-pinned", "");
+    await expect(flagOf(page, host.name)).toHaveCSS("opacity", "1");
+    await expect(caretOf(page, first.name)).not.toHaveAttribute("data-pinned", "");
+    await expect(caretOf(page, first.name).locator(".cm-remote-caret-bar")).toHaveCSS(
+      "opacity",
+      "1",
+    );
+
+    // A selection is fainter than with a few people.
+    await first.page.keyboard.press("Shift+ArrowLeft");
+    const tint = page.locator(".cm-remote-selection");
+    await expect(tint).toHaveCount(1);
+    expect(await tint.evaluate((el) => getComputedStyle(el).backgroundColor)).toMatch(TINT_12);
+    await first.page.keyboard.press("ArrowRight");
+    await expect(tint).toHaveCount(0);
+    await screenshot(page, "busy");
+
+    // Everyone has been quiet for longer than the quiet spell.
+    await page.waitForTimeout(10_500);
+    await watchCarets(page);
+    await resetProbe(page);
+
+    // First starts typing and goes on: the name comes once, and the caret never glides.
+    await first.page.keyboard.type("x".repeat(40), { delay: 90 });
+    await expect.poll(() => editorText(page)).toContain("x".repeat(40));
+    await expectFlagHidden(page, first.name);
+    let probe = await readProbe(page);
+    expect(probe.flashes[first.name]).toBe(1);
+    expect(probe.glides[first.name]).toBeUndefined();
+
+    // Three start at once after another quiet spell: two names at a time at most, so one gets
+    // none, and is not given one later when the others have faded.
+    await page.waitForTimeout(10_500);
+    await resetProbe(page);
+    await Promise.all([
+      first.page.keyboard.type("1"),
+      second.page.keyboard.type("2"),
+      third.page.keyboard.type("3"),
+    ]);
+    await expect
+      .poll(async () => {
+        const seen = (await readProbe(page)).flashes;
+        return [first, second, third].filter((person) => seen[person.name] === 1).length;
+      })
+      .toBe(2);
+    await expectFlagHidden(page, first.name);
+    await expectFlagHidden(page, second.name);
+    await expectFlagHidden(page, third.name);
+    probe = await readProbe(page);
+    const named = [first, second, third].filter((person) => probe.flashes[person.name] === 1);
+    const denied = [first, second, third].filter(
+      (person) => probe.flashes[person.name] === undefined,
+    );
+    expect(named).toHaveLength(2);
+    expect(denied).toHaveLength(1);
+    for (const person of [first, second, third]) expect(probe.glides[person.name]).toBeUndefined();
+  } finally {
+    await closeAll(host, observer, first, second, third);
+  }
+});
+
+test("a crowded file: no name by itself, dimmer bars and selections, the host pinned, hysteresis", async ({
   browser,
   browserName,
 }) => {
-  test.setTimeout(240_000);
-  const [host, observer, near, far, fifth, sixth] = (await room(browser, [
+  test.setTimeout(300_000);
+  const [host, observer, near, far, ...others] = (await room(browser, [
     "Teacher",
     "Watching",
     "Nearby",
     "Faraway",
     "Fifth",
     "Sixth",
-  ])) as [User, User, User, User, User, User];
+    "Seventh",
+    "Eighth",
+  ])) as [User, User, User, User, User, User, User, User];
   try {
     const page = observer.page;
     const editor = page.locator(".cm-editor");
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.keyboard.press("Control+Home");
-    await goToLine(near, 3);
+    await goToLine(near, 1);
     await goToLine(far, 11);
-    await goToLine(fifth, 7);
-    await goToLine(sixth, 9);
-    await expect(page.locator(".cm-remote-caret")).toHaveCount(5);
+    for (const [i, person] of others.entries()) await goToLine(person, 3 + i);
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(7);
     await expect(editor).toHaveAttribute("data-remote-cursors", "crowded");
-    // Moves made before the sixth person arrived may still be fading.
-    for (const person of [near, far, fifth, sixth]) await expectFlagHidden(page, person.name);
+    // Moves made while the others were still arriving may still be fading.
+    for (const person of [near, far, ...others]) await expectFlagHidden(page, person.name);
     await watchCarets(page);
 
     // The share owner's name stays on, unfaded, and only theirs.
@@ -496,39 +604,37 @@ test("a crowded file calms down: near flags only, the host pinned, hysteresis on
       await page.emulateMedia({ contrast: "no-preference" });
     }
 
-    // Selections are a light tint.
+    // Selections are fainter still.
     await far.page.keyboard.press("Shift+ArrowLeft");
     const tint = page.locator(".cm-remote-selection");
     await expect(tint).toHaveCount(1);
-    expect(await tint.evaluate((el) => getComputedStyle(el).backgroundColor)).toMatch(/ 0\.12\)$/);
+    expect(await tint.evaluate((el) => getComputedStyle(el).backgroundColor)).toMatch(TINT_8);
     await far.page.keyboard.press("ArrowRight");
     await expect(tint).toHaveCount(0);
     await expectFlagHidden(page, far.name);
 
-    // Someone far from my cursor types: no name. Someone close by types: a name.
+    // Nobody's name comes by itself: not far away, and not right beside my cursor either.
     await resetProbe(page);
     await far.page.keyboard.type("far");
     await expect.poll(() => editorText(page)).toContain("far");
-    await page.waitForTimeout(300);
-    expect((await readProbe(page)).flashes[far.name]).toBeUndefined();
-    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "0");
     await near.page.keyboard.type("near");
     await expect.poll(() => editorText(page)).toContain("near");
-    await expect(flagOf(page, near.name)).toHaveCSS("opacity", "1");
+    await page.waitForTimeout(400);
+    const probe = await readProbe(page);
+    expect(probe.flashes[far.name]).toBeUndefined();
+    expect(probe.flashes[near.name]).toBeUndefined();
+    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "0");
+    await expect(flagOf(page, near.name)).toHaveCSS("opacity", "0");
     await screenshot(page, "crowded");
 
+    // Hovering a caret still shows the name, and moving away ends it.
+    await pointAtCaret(page, far.name);
+    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "1");
+    await page.mouse.move(2, 2);
+    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "0");
+
     // The participant list finds anyone: the avatars...
-    await expectFlagHidden(page, near.name);
-    const people = page.getByTestId("people");
-    const avatar = people.getByRole("button", { name: `Follow: ${near.name}` });
-    if (await avatar.count()) await avatar.hover();
-    else {
-      await page.getByTestId("people-more").click();
-      await page
-        .getByTestId("people-more-list")
-        .getByRole("button", { name: `Follow: ${near.name}` })
-        .hover();
-    }
+    await hoverPerson(page, near.name);
     await expect(caretOf(page, near.name)).toHaveAttribute("data-spot", "");
     await expect(flagOf(page, near.name)).toHaveCSS("opacity", "1");
     await expect(caretOf(page, near.name).locator(".cm-remote-caret-bar")).toHaveCSS(
@@ -571,20 +677,74 @@ test("a crowded file calms down: near flags only, the host pinned, hysteresis on
     await chooseCursors(page, "Auto");
     await expect(editor).toHaveAttribute("data-remote-cursors", "crowded");
 
-    // Leaving: still crowded at 5, back to normal only at 4.
-    await sixth.context.close();
-    await expect(page.locator(".cm-remote-caret")).toHaveCount(4);
+    // Leaving: still crowded at 7, busy at 6, back to normal only at 2.
+    const [fifth, sixth, seventh, eighth] = others as [User, User, User, User];
+    await eighth.context.close();
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(6);
     await page.waitForTimeout(300);
     await expect(editor).toHaveAttribute("data-remote-cursors", "crowded");
+    await seventh.context.close();
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(5);
+    await expect(editor).toHaveAttribute("data-remote-cursors", "busy");
+    await expect(caretOf(page, host.name)).toHaveAttribute("data-pinned", "");
+    await expect(bar).toHaveCSS("opacity", "1");
+    await sixth.context.close();
     await fifth.context.close();
-    await expect(page.locator(".cm-remote-caret")).toHaveCount(3);
+    await far.context.close();
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(2);
+    await page.waitForTimeout(300);
+    await expect(editor).toHaveAttribute("data-remote-cursors", "busy");
+    await near.context.close();
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(1);
     await expect(editor).toHaveAttribute("data-remote-cursors", "normal");
     await expect(caretOf(page, host.name)).not.toHaveAttribute("data-pinned", "");
-    await expect(bar).toHaveCSS("opacity", "1");
-    await far.page.keyboard.type("?");
-    await expect(flagOf(page, far.name)).toHaveCSS("opacity", "1");
   } finally {
-    await closeAll(host, observer, near, far);
+    await closeAll(host, observer, near, far, ...others);
+  }
+});
+
+test("a caret pushed under a resting pointer opens no name; moving the pointer onto it does", async ({
+  browser,
+}) => {
+  const [observer, peer, typist] = (await room(browser, ["Watching", "Peer", "Typing"])) as [
+    User,
+    User,
+    User,
+  ];
+  try {
+    const page = observer.page;
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await goToLine(peer, 5);
+    await goToLine(typist, 1);
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(2);
+    await expectFlagHidden(page, peer.name);
+    await expectFlagHidden(page, typist.name);
+
+    // The pointer rests one line below the caret, on the line the text will push it to.
+    const before = await caretOf(page, peer.name).locator(".cm-remote-caret-bar").boundingBox();
+    if (!before) throw new Error("no caret box");
+    await page.mouse.move(before.x + 2, before.y + before.height * 1.5);
+    await page.waitForTimeout(300);
+    await expect(caretOf(page, peer.name)).not.toHaveAttribute("data-spot", "");
+    await watchCarets(page);
+
+    await typist.page.keyboard.press("Enter");
+    await expect
+      .poll(async () => (await caretOf(page, peer.name).boundingBox())?.y)
+      .toBeGreaterThan(before.y + before.height / 2);
+    const after = await caretOf(page, peer.name).locator(".cm-remote-caret-bar").boundingBox();
+    expect(Math.abs((after?.y ?? 0) - (before.y + before.height))).toBeLessThan(before.height / 2);
+    await page.waitForTimeout(500);
+    await expect(caretOf(page, peer.name)).not.toHaveAttribute("data-spot", "");
+    await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "0");
+    expect((await readProbe(page)).flashes[peer.name]).toBeUndefined();
+
+    // A real move of the pointer onto the caret opens it.
+    await pointAtCaret(page, peer.name);
+    await expect(caretOf(page, peer.name)).toHaveAttribute("data-spot", "");
+    await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
+  } finally {
+    await closeAll(observer, peer, typist);
   }
 });
 
