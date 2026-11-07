@@ -532,7 +532,6 @@ test("a busy file: fainter selections, a name only for someone who starts, two a
     const secondTab = await first.context.newPage();
     await joinByLink({ ...first, page: secondTab }, shareIdOf(page));
     await waitForEditor(secondTab);
-    await secondTab.getByTestId("device-choice-skip").click();
     await expect(page.locator(".cm-remote-caret")).toHaveCount(5);
     await first.page.keyboard.type("a");
     await expect.poll(() => editorText(page)).toContain("a");
@@ -540,7 +539,8 @@ test("a busy file: fainter selections, a name only for someone who starts, two a
       .poll(async () => (await readProbe(page)).flashes[first.name] ?? 0)
       .toBeGreaterThan(0);
     await secondTab.locator(".cm-content").click();
-    await secondTab.keyboard.type("b");
+    await secondTab.keyboard.type("Q");
+    await expect.poll(() => editorText(page)).toContain("Q");
     await page.waitForTimeout(300);
     expect((await readProbe(page)).flashes[first.name]).toBe(1);
     await secondTab.close();
@@ -771,6 +771,44 @@ test("a caret pushed under a resting pointer opens no name; moving the pointer o
     await expect(flagOf(page, peer.name)).toHaveCSS("opacity", "1");
   } finally {
     await closeAll(observer, peer, typist);
+  }
+});
+
+test("a hover name goes when its caret scrolls away; Escape holds only until the caret has left", async ({
+  browser,
+}) => {
+  const [observer, peer] = (await room(browser, ["Watching", "Peer"], 60)) as [User, User];
+  try {
+    const page = observer.page;
+    await goToLine(peer, 5);
+    await expect(page.locator(".cm-remote-caret")).toHaveCount(1);
+    await expectFlagHidden(page, peer.name);
+
+    await pointAtCaret(page, peer.name);
+    await expect(caretOf(page, peer.name)).toHaveAttribute("data-spot", "");
+    await page.locator(".cm-scroller").evaluate((el) => el.scrollTo({ top: 40 }));
+    await expect(caretOf(page, peer.name)).not.toHaveAttribute("data-spot", "");
+    await page.locator(".cm-scroller").evaluate((el) => el.scrollTo({ top: 0 }));
+
+    await page.mouse.move(0, 400);
+    await pointAtCaret(page, peer.name);
+    await expect(caretOf(page, peer.name)).toHaveAttribute("data-spot", "");
+    await page.keyboard.press("Escape");
+    await expect(caretOf(page, peer.name)).not.toHaveAttribute("data-spot", "");
+    const bar = caretOf(page, peer.name).locator(".cm-remote-caret-bar");
+    const home = await bar.boundingBox();
+    if (!home) throw new Error("no caret box");
+    await goToLine(peer, 8);
+    await expect.poll(async () => (await bar.boundingBox())?.y).toBeGreaterThan(home.y);
+    await goToLine(peer, 5);
+    await expect.poll(async () => (await bar.boundingBox())?.y).toBe(home.y);
+    // Back under the pointer: it opens nothing until the pointer moves, and then it does.
+    await page.waitForTimeout(300);
+    await expect(caretOf(page, peer.name)).not.toHaveAttribute("data-spot", "");
+    await page.mouse.move(home.x + 3, home.y + home.height / 2);
+    await expect(caretOf(page, peer.name)).toHaveAttribute("data-spot", "");
+  } finally {
+    await closeAll(observer, peer);
   }
 });
 

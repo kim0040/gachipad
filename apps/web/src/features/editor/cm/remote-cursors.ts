@@ -534,6 +534,8 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
 
       // Names still showing from an earlier flash, plus the ones granted in this draw.
       const now = performance.now();
+      // No flash outlives these densities (the markers' `quiet`), so none takes a slot afterwards.
+      if (density === "carets" || density === "crowded") flashEnds.clear();
       let namesShowing = 0;
       for (const [id, end] of flashEnds) {
         if (end > now) namesShowing++;

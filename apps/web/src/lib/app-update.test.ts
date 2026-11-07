@@ -407,7 +407,7 @@ describe("app update", () => {
     });
 
     it.each(["/abc1234567", "/lab/abc1234567", "/new"])(
-      "leaves %s to the prompt, whatever phase it is in",
+      "leaves %s to the prompt, with a worker waiting at load",
       async (pathname) => {
         const tab = browser();
         (window.location as { pathname: string }).pathname = pathname;
