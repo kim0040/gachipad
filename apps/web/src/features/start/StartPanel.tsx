@@ -4,14 +4,16 @@ import { Button, EmptyState, LanguageBadge, PinInput, Skeleton, Spinner } from "
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { History, LayoutTemplate, Plus, Radar, Upload } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api, isApiError } from "../../lib/api";
 import { useEventsSnapshot } from "../../lib/events";
 import { firstLines } from "../../lib/format";
 import { useLocale, useT } from "../../lib/i18n";
 import { openTemplates } from "../../lib/overlays";
 import { useSession } from "../../lib/session";
-import { collectDroppedFiles } from "../editor/dropped-files";
+import { FileDropOverlay } from "../app/FileDropOverlay";
+import { useFileDrop } from "../app/file-drop";
+import { collectDrop } from "../editor/dropped-files";
 import { useCreateShare } from "./use-create-share";
 
 const CODE_LENGTH = 6;
@@ -24,31 +26,27 @@ const RECENT_COUNT = 4;
 export function StartPanel({ className }: { className?: string }) {
   const t = useT();
   const create = useCreateShare();
-  const [dragging, setDragging] = useState(false);
+  // Files dropped anywhere on the page start a new share; the overlay says so, and keeps saying it
+  // (with a spinner) while the share is created.
+  const createRef = useRef(create.createFromFiles);
+  createRef.current = create.createFromFiles;
+  const [dropping, setDropping] = useState(false);
+  const dropOverlay = useFileDrop({
+    mode: "create",
+    denied: null,
+    busy: dropping,
+    onDrop: (transfer) => {
+      setDropping(true);
+      // Read the transfer now, in the event: the browser empties it afterwards.
+      void collectDrop(transfer)
+        .then((dropped) => createRef.current(dropped))
+        .finally(() => setDropping(false));
+    },
+  });
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target; the buttons inside do the same job from the keyboard
-    <div
-      role="presentation"
-      className={`flex flex-col gap-8 ${className ?? ""}`}
-      data-testid="start-panel"
-      onDragOver={(event) => {
-        if (Array.from(event.dataTransfer.types).includes("Files")) {
-          event.preventDefault();
-          setDragging(true);
-        }
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
-      }}
-      onDrop={(event) => {
-        if (!Array.from(event.dataTransfer.types).includes("Files")) return;
-        event.preventDefault();
-        setDragging(false);
-        void collectDroppedFiles(event.dataTransfer).then(create.createFromFiles);
-      }}
-      data-drop-over={dragging || undefined}
-    >
+    <div className={`flex flex-col gap-8 ${className ?? ""}`} data-testid="start-panel">
+      <FileDropOverlay view={dropOverlay} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <Button
           variant="primary"

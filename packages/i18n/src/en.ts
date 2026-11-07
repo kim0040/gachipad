@@ -223,6 +223,7 @@ export const en = {
   "editor.download.zipAction": "Download all (.zip)",
   "editor.files.title": "Files",
   "editor.files.newAction": "New file",
+  "editor.files.uploadAction": "Upload files",
   "editor.files.nameLabel": "File name",
   "editor.files.namePlaceholder": "main.py",
   "editor.files.deleteAction": "Delete file",
@@ -615,9 +616,47 @@ export const en = {
   "toast.youBanned": "The owner blocked you from this share",
   "toast.restored": "Restored the version from {time}",
   "toast.settingsReset": "Settings reset",
-  "toast.uploaded.one": "Uploaded {count} file",
-  "toast.uploaded.other": "Uploaded {count} files",
-  "toast.uploadFailed": "Couldn't upload. Check the file size and try again.",
+  "toast.uploadFailed": "Couldn't add the files. Try again in a moment.",
+  "toast.upload.noText": "No text files found",
+  "toast.upload.noText.hint": "Drop code or text files, a folder or a .zip.",
+  "toast.import.added": "Added {name}",
+  "toast.import.addedMany.one": "Added {count} file",
+  "toast.import.addedMany.other": "Added {count} files",
+  "toast.import.renamed":
+    "{from} already exists with different content, so this file was added as {to}.",
+  "toast.import.renamedMore.one": "{count} more file got a number in its name.",
+  "toast.import.renamedMore.other": "{count} more files got a number in their names.",
+  "toast.import.duplicate": "{name} already has the same content and was not added again.",
+  "toast.import.duplicateMany.one":
+    "{count} file with the same content is already here and was not added again.",
+  "toast.import.duplicateMany.other":
+    "{count} files with the same content are already here and were not added again.",
+  "toast.import.openedDuplicate": "{name} with the same content is already here, so it was opened",
+  "toast.import.openedDuplicateMany.one":
+    "{count} file with the same content is already here, so nothing new was added",
+  "toast.import.openedDuplicateMany.other":
+    "{count} files with the same content are already here, so nothing new was added",
+  "toast.import.none": "No files were added",
+  "toast.import.empty": "No files were found in what you dropped",
+  "toast.import.reading.one": "Reading {count} file…",
+  "toast.import.reading.other": "Reading {count} files…",
+  "toast.import.skipped.one": "{count} item was skipped",
+  "toast.import.skipped.other": "{count} items were skipped",
+  "toast.import.more.one": "and {count} more",
+  "toast.import.more.other": "and {count} more",
+  "toast.import.skipTail.one": "{count} more: {reason}",
+  "toast.import.skipTail.other": "{count} more: {reason}",
+  "toast.import.reason.binary": "not a text file",
+  "toast.import.reason.tooBig": "over {size}",
+  "toast.import.reason.unreadable": "couldn't be read",
+  "toast.import.reason.folder": "this browser can't read folders",
+  "toast.import.reason.excludedFolder": "folders like this are skipped",
+  "toast.import.reason.tooMany": "a share holds at most {max} files",
+  "toast.import.reason.shareFull": "over the share's size limit",
+  "toast.import.reason.badPath": "path can't be used",
+  "toast.import.reason.zipTooMany": "too many files in the archive",
+  "toast.import.reason.zipTooBig": "too large once unpacked",
+  "toast.import.reason.zipBad": "unreadable .zip",
   "toast.undoAction": "Undo",
 
   // ── Upload ──
@@ -630,6 +669,14 @@ export const en = {
   "upload.progress.other": "Uploading {count} files…",
   "upload.asShare": "Open as a multi-file share",
   "upload.dropOnPerson": "Drop onto a person to send it",
+  "upload.drop.add": "Drop to add to this share",
+  "upload.drop.new": "Drop to start a new share",
+  "upload.drop.formats": "Files, folders and .zip archives all work",
+  "upload.drop.pending": "Creating a new share…",
+  "upload.drop.deniedBody": "Nothing will be added if you drop here",
+  "upload.denied.viewOnly": "This share is view-only, so files can't be added",
+  "upload.denied.locked": "This share is locked, so files can't be added",
+  "upload.denied.ownerOnly": "Only the owner can add files here",
 
   // ── Lab mode ──
   "lab.mode": "Lab mode",
@@ -1138,7 +1185,11 @@ export const en = {
 
   // ── Empty and loading states ──
   "empty.file.title": "This file is empty",
-  "empty.file.body": "Type or paste code to start. The language is detected automatically.",
+  "empty.file.body":
+    "Type or paste code, or drop a file here. The language is detected automatically.",
+  "empty.file.bodyTouch": "Type or paste code. Add files with the upload button above.",
+  "empty.file.bodyType": "Type or paste code to start. The language is detected automatically.",
+  "empty.file.bodyReadOnly": "This file is empty so far. It's view-only, so you can't type here.",
   "empty.alone.title": "You're the only one here",
   "empty.alone.body": "Share the code so others can join.",
 

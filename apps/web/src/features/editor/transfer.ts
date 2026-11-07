@@ -1,7 +1,9 @@
 import { toast } from "@gachipad/ui";
 import { type DragEvent, useState } from "react";
-import { api, isApiError } from "../../lib/api";
+import { api } from "../../lib/api";
+import { errorText } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
+import { FILE_DROP_TARGET_ATTR } from "../app/file-drop";
 import { collectDroppedFiles } from "./dropped-files";
 
 /** MIME type used while dragging a file tab or tree row of this share. */
@@ -29,6 +31,8 @@ export function useTransferTarget(shareId: string, to: string, name: string) {
   return {
     over,
     props: {
+      // The page-level drop handling leaves a drag over this element to it.
+      [FILE_DROP_TARGET_ATTR]: "",
       onDragEnter: (event: DragEvent) => {
         if (accepts(event)) {
           event.preventDefault();
@@ -64,10 +68,10 @@ export function useTransferTarget(shareId: string, to: string, name: string) {
             }
             toast({ title: t("toast.sent", { name }), tone: "success" });
           } catch (error) {
-            const limited = isApiError(error, "upload_pool_limited");
+            const text = errorText(error);
             toast({
-              title: t(limited ? "error.upload_pool_limited" : "toast.uploadFailed"),
-              description: limited ? t("error.upload_pool_limited.hint") : undefined,
+              title: t(text.title),
+              description: text.hint ? t(text.hint) : undefined,
               tone: "danger",
             });
           }

@@ -27,6 +27,7 @@ import {
   readOnlyExtension,
   themeExtension,
 } from "./cm/extensions";
+import { editorFileDropHandlers, pastedFiles } from "./cm/file-drop";
 import { remoteCursorMode, remoteCursors } from "./cm/remote-cursors";
 import { searchPhrases } from "./cm/search-phrases";
 import { type EditorInfo, setInitialLength } from "./doc-info";
@@ -44,7 +45,10 @@ export interface EditorPaneProps {
   /** A local, non-composition text input (not paste or remote Yjs content). */
   onType: () => void;
   onOpenComments: (ids: string[]) => void;
-  onDropFiles: (files: DataTransfer) => void;
+  /** Files pasted from a file manager's clipboard (not dropped: the page takes drops). */
+  onPasteFiles: (files: File[]) => void;
+  /** What the empty file says: type, paste or drop, depending on what this person can do. */
+  emptyHint: string;
 }
 
 interface Compartments {
@@ -57,10 +61,7 @@ interface Compartments {
   readOnly: Compartment;
   completion: Compartment;
   remoteCursors: Compartment;
-}
-
-function hasFiles(transfer: DataTransfer | null): boolean {
-  return Boolean(transfer && Array.from(transfer.types).includes("Files"));
+  hint: Compartment;
 }
 
 /** One CodeMirror view bound to a file of the shared document. */
@@ -98,6 +99,7 @@ export function EditorPane(props: EditorPaneProps) {
       readOnly: new Compartment(),
       completion: new Compartment(),
       remoteCursors: new Compartment(),
+      hint: new Compartment(),
     };
     compartments.current = parts;
     const current = latest.current;
@@ -118,7 +120,7 @@ export function EditorPane(props: EditorPaneProps) {
           parts.keymap.of(plainKeymap(initialPrefs.keymap)),
           baseExtensions(t("a11y.editor")),
           searchPhrases(t),
-          placeholder(t("empty.file.body")),
+          parts.hint.of(placeholder(current.emptyHint)),
           yCollab(ytext, null, { undoManager }),
           parts.theme.of(themeExtension(themeId)),
           parts.font.of(fontExtension(initialPrefs.fontSize)),
@@ -171,23 +173,17 @@ export function EditorPane(props: EditorPaneProps) {
           }),
           EditorView.domEventHandlers({
             paste(event, view) {
+              const files = pastedFiles(event.clipboardData);
+              if (files.length > 0) {
+                event.preventDefault();
+                latest.current.onPasteFiles(files);
+                return true;
+              }
               const text = event.clipboardData?.getData("text/plain") ?? "";
               if (text) latest.current.onPaste(text, view.state.doc.length === 0);
               return false;
             },
-            dragover(event) {
-              if (hasFiles(event.dataTransfer)) {
-                event.preventDefault();
-                return true;
-              }
-              return false;
-            },
-            drop(event) {
-              if (!event.dataTransfer || !hasFiles(event.dataTransfer)) return false;
-              event.preventDefault();
-              latest.current.onDropFiles(event.dataTransfer);
-              return true;
-            },
+            ...editorFileDropHandlers(),
           }),
         ],
       }),
@@ -239,6 +235,14 @@ export function EditorPane(props: EditorPaneProps) {
     if (!ready || !view || !parts) return;
     view.dispatch({ effects: parts.readOnly.reconfigure(readOnlyExtension(readOnly)) });
   }, [ready, readOnly, viewRef]);
+
+  const { emptyHint } = props;
+  useEffect(() => {
+    const view = viewRef.current;
+    const parts = compartments.current;
+    if (!ready || !view || !parts) return;
+    view.dispatch({ effects: parts.hint.reconfigure(placeholder(emptyHint)) });
+  }, [ready, emptyHint, viewRef]);
 
   // Key bindings: vim and emacs load their own chunk.
   useEffect(() => {

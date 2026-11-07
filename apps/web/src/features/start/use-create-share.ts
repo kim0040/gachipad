@@ -1,12 +1,14 @@
 import type { MessageKey } from "@gachipad/i18n";
-import type { Template } from "@gachipad/shared";
+import { MAX_FILES_PER_SHARE, type Template } from "@gachipad/shared";
 import { toast } from "@gachipad/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { api } from "../../lib/api";
+import { api, isApiError } from "../../lib/api";
 import { errorText } from "../../lib/errors";
 import { useT } from "../../lib/i18n";
+import type { DroppedFiles } from "../editor/dropped-files";
+import { skipToast } from "../editor/import-summary";
 
 /** Creating a share, empty or from files, and opening it. */
 export function useCreateShare() {
@@ -60,14 +62,35 @@ export function useCreateShare() {
         setPending(false);
       }
     },
-    createFromFiles: async (files: File[]) => {
-      if (files.length === 0) return;
+    /**
+     * Creates a share from dropped or picked files. Every failure says what went wrong: too many
+     * files, nothing readable as text, too large, over a quota or rate limit, offline.
+     */
+    createFromFiles: async (input: File[] | DroppedFiles) => {
+      const { files, skipped } = Array.isArray(input) ? { files: input, skipped: [] } : input;
+      if (files.length === 0) {
+        const none = skipToast(t, skipped);
+        toast(none ?? { title: t("toast.import.empty"), tone: "warning" });
+        return;
+      }
+      if (files.length > MAX_FILES_PER_SHARE) {
+        toast({ title: t("editor.files.limit", { max: MAX_FILES_PER_SHARE }), tone: "warning" });
+        return;
+      }
       setPending(true);
       try {
         const created = (await api.upload(files, { asShare: true })) as { id: string };
         await open(created.id);
-      } catch {
-        toast({ title: t("toast.uploadFailed"), tone: "danger" });
+        const extra = skipToast(t, skipped);
+        if (extra) toast(extra);
+      } catch (error) {
+        if (isApiError(error, "validation")) {
+          toast({
+            title: t("toast.upload.noText"),
+            description: t("toast.upload.noText.hint"),
+            tone: "warning",
+          });
+        } else fail(error);
       } finally {
         setPending(false);
       }

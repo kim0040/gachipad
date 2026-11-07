@@ -436,6 +436,7 @@ describe.skipIf(!integration)("GET /api/settings/public", () => {
       anonymousTtlHours: 24,
       historyRetentionDays: 7,
       maxUploadMB: 200,
+      maxDocBytes: defaultSettings().maxDocBytes,
       guestAllowed: true,
     });
   });
@@ -460,6 +461,7 @@ describe.skipIf(!integration)("GET /api/settings/public", () => {
       anonymousTtlHours: 48,
       historyRetentionDays: 30,
       maxUploadMB: 50,
+      maxDocBytes: defaultSettings().maxDocBytes,
       guestAllowed: true,
     });
   });

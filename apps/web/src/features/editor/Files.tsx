@@ -23,6 +23,7 @@ import {
   PanelLeft,
   Pencil,
   Trash2,
+  Upload,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -355,14 +356,24 @@ export function FileTabs({
         })}
       </fieldset>
       {canChangeFiles ? (
-        <IconButton
-          aria-label={t("editor.files.newAction")}
-          size="sm"
-          onClick={ops.add}
-          data-testid="add-file"
-        >
-          <FilePlus2 />
-        </IconButton>
+        <>
+          <IconButton
+            aria-label={t("editor.files.newAction")}
+            size="sm"
+            onClick={ops.add}
+            data-testid="add-file"
+          >
+            <FilePlus2 />
+          </IconButton>
+          <IconButton
+            aria-label={t("editor.files.uploadAction")}
+            size="sm"
+            onClick={() => ctx.openPanel("upload")}
+            data-testid="upload-files"
+          >
+            <Upload />
+          </IconButton>
+        </>
       ) : null}
     </div>
   );
@@ -472,9 +483,18 @@ export function FileTree({ ops }: { ops: FileOps }) {
       <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-line ps-3 pe-1.5">
         <h2 className="text-label font-medium text-fg-2">{t("editor.files.title")}</h2>
         {canChangeFiles ? (
-          <IconButton aria-label={t("editor.files.newAction")} size="sm" onClick={ops.add}>
-            <FilePlus2 />
-          </IconButton>
+          <div className="flex items-center">
+            <IconButton aria-label={t("editor.files.newAction")} size="sm" onClick={ops.add}>
+              <FilePlus2 />
+            </IconButton>
+            <IconButton
+              aria-label={t("editor.files.uploadAction")}
+              size="sm"
+              onClick={() => ctx.openPanel("upload")}
+            >
+              <Upload />
+            </IconButton>
+          </div>
         ) : null}
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto p-1.5 [scrollbar-gutter:stable]">
