@@ -4,6 +4,7 @@ import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   getPrefs,
+  REMOTE_CURSOR_MODES,
   resetPrefs,
   sanitizePrefs,
   setPrefs,
@@ -44,6 +45,17 @@ describe("sanitizePrefs", () => {
     expect(result.lineNumbers).toBe(DEFAULT_PREFS.lineNumbers);
     expect(result.smoothTyping).toBe(true);
     expect(result.codeCompletion).toBe(true);
+  });
+
+  it("sanitises the remote cursor mode to one of the known values, auto by default", () => {
+    expect(DEFAULT_PREFS.remoteCursors).toBe("auto");
+    expect(sanitizePrefs({}).remoteCursors).toBe("auto");
+    for (const value of REMOTE_CURSOR_MODES) {
+      expect(sanitizePrefs({ remoteCursors: value }).remoteCursors).toBe(value);
+    }
+    for (const value of ["off", "", null, 1, true, {}]) {
+      expect(sanitizePrefs({ remoteCursors: value }).remoteCursors).toBe("auto");
+    }
   });
 
   it("keeps valid values", () => {

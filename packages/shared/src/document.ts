@@ -55,5 +55,9 @@ export const awarenessStateSchema = z.object({
   following: userRefSchema.shape.clientId.optional(),
   /** The owner is presenting: everyone else's editor follows this client's viewport. */
   presenting: z.boolean().optional(),
+  /** Counts this client's own moves and edits; only a change means the person did something. */
+  moved: z.number().int().nonnegative().optional(),
+  /** Stamped by the server for the share owner or lab teacher; a client's own value is dropped. */
+  host: z.boolean().optional(),
 });
 export type AwarenessState = z.infer<typeof awarenessStateSchema>;

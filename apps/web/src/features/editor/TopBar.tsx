@@ -10,6 +10,9 @@ import {
   DropdownMenuTrigger,
   IconButton,
   isImeKey,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Tooltip,
 } from "@gachipad/ui";
 import { Link } from "@tanstack/react-router";
@@ -33,13 +36,13 @@ import {
   UserRound,
   Wand2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type Participant, useComments } from "../../lib/collab/hooks";
 import { setTitle } from "../../lib/collab/model";
 import { useT } from "../../lib/i18n";
 import { openPalette, openShortcuts } from "../../lib/overlays";
 import { shortcutKeys } from "../../lib/shortcuts";
-import { labelColorFor } from "./cm/remote-cursors";
+import { labelColorFor, spotlightRemote } from "./cm/remote-cursors";
 import { useDocumentPermissions, useEditor } from "./context";
 import { canFormat } from "./format-code";
 import { useTransferTarget } from "./transfer";
@@ -323,15 +326,80 @@ function People() {
         <PersonAvatar key={person.clientId} person={person} overlap={index > 0} />
       ))}
       {hidden > 0 ? (
-        <span
-          role="img"
-          aria-label={t("editor.top.moreParticipants", { count: hidden })}
-          className="-ms-1.5 inline-grid size-6 place-items-center rounded-full bg-fill-active text-caption font-semibold text-fg-2 ring-2 ring-panel"
-        >
-          +{hidden}
-        </span>
+        <Popover>
+          <PopoverTrigger
+            aria-label={t("editor.top.moreParticipants", { count: hidden })}
+            data-testid="people-more"
+            className="-ms-1.5 inline-grid size-6 place-items-center rounded-full bg-fill-active text-caption font-semibold text-fg-2 ring-2 ring-panel hover:bg-fill-hover coarse:size-11"
+          >
+            +{hidden}
+          </PopoverTrigger>
+          <PopoverContent align="end">
+            <ul className="flex max-h-72 flex-col overflow-y-auto" data-testid="people-more-list">
+              {people.slice(shown.length).map((person) => (
+                <li key={person.clientId}>
+                  <PersonRow person={person} />
+                </li>
+              ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
       ) : null}
     </fieldset>
+  );
+}
+
+/** Hovering or focusing a person highlights their caret in the file, if it is drawn. */
+function useCaretSpotlight(clientId: string) {
+  const { viewRef } = useEditor();
+  const lit = useRef(false);
+  const light = (on: boolean) => {
+    lit.current = on;
+    spotlightRemote(viewRef.current, on ? clientId : null);
+  };
+  // A person who leaves takes their row away while it is lit, with no event to end it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only the unmount matters
+  useEffect(
+    () => () => {
+      if (lit.current) spotlightRemote(viewRef.current, null);
+    },
+    [],
+  );
+  return {
+    onMouseEnter: () => light(true),
+    onMouseLeave: () => light(false),
+    onFocus: () => light(true),
+    onBlur: () => light(false),
+  };
+}
+
+function PersonRow({ person }: { person: Participant }) {
+  const t = useT();
+  const ctx = useEditor();
+  const spotlight = useCaretSpotlight(person.clientId);
+  const isFollowed = ctx.following === person.clientId;
+  return (
+    <button
+      type="button"
+      aria-pressed={isFollowed}
+      aria-label={
+        isFollowed
+          ? t("editor.top.followStopAction")
+          : `${t("editor.top.followAction")}: ${person.name}`
+      }
+      onClick={() => ctx.setFollowing(isFollowed ? null : person.clientId)}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-body-sm hover:bg-fill-hover coarse:min-h-11"
+      {...spotlight}
+    >
+      <Avatar
+        name={person.name}
+        slot={1}
+        size="sm"
+        style={{ backgroundColor: person.color, color: labelColorFor(person.color) }}
+        className={isFollowed ? "ring-2 ring-accent-text" : undefined}
+      />
+      <span className="min-w-0 flex-1 truncate">{person.name}</span>
+    </button>
   );
 }
 
@@ -339,6 +407,7 @@ function PersonAvatar({ person, overlap }: { person: Participant; overlap: boole
   const t = useT();
   const ctx = useEditor();
   const transfer = useTransferTarget(ctx.session.shareId, person.clientId, person.name);
+  const spotlight = useCaretSpotlight(person.clientId);
   const isFollowed = ctx.following === person.clientId;
   const name = person.isSelf ? `${person.name} (${t("common.you")})` : person.name;
   const interactive = !person.isSelf;
@@ -367,6 +436,7 @@ function PersonAvatar({ person, overlap }: { person: Participant; overlap: boole
           data-drop-over={transfer.over || undefined}
           className={`ui-appear-fade inline-flex rounded-full ring-2 ring-panel ${overlap ? "-ms-1.5" : ""} coarse:p-1`}
           {...transfer.props}
+          {...spotlight}
         >
           {content}
         </button>

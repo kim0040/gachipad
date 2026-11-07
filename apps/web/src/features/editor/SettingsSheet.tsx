@@ -31,6 +31,8 @@ import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   KEYMAPS,
+  REMOTE_CURSOR_MODES,
+  type RemoteCursorMode,
   resetPrefs,
   setPrefs,
   TAB_SIZES,
@@ -296,6 +298,23 @@ function SettingsBody() {
           onCheckedChange={(smoothTyping) => setPrefs({ smoothTyping })}
           data-testid="switch-smooth-typing"
         />
+        <div className="flex flex-col gap-1">
+          <Row label={t("settings.remoteCursors.label")}>
+            <div className="w-full" data-testid="select-remote-cursors">
+              <Select
+                size="sm"
+                aria-label={t("settings.remoteCursors.label")}
+                value={prefs.remoteCursors}
+                onValueChange={(value) => setPrefs({ remoteCursors: value as RemoteCursorMode })}
+                options={REMOTE_CURSOR_MODES.map((mode) => ({
+                  value: mode,
+                  label: t(`settings.remoteCursors.${mode}`),
+                }))}
+              />
+            </div>
+          </Row>
+          <p className="text-caption text-fg-3">{t("settings.remoteCursors.hint")}</p>
+        </div>
         <Switch
           label={t("settings.codeCompletion.label")}
           checked={prefs.codeCompletion}

@@ -1,9 +1,9 @@
-import { participantPermissions, YDOC } from "@gachipad/shared";
+import { generateClientId, participantPermissions, signCollabToken, YDOC } from "@gachipad/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { loadPersisted } from "./persisted-doc.js";
 import type { CollabServer } from "./server.js";
-import { Harness, servicesAvailable, sleep, waitFor } from "./testing/harness.js";
+import { Harness, servicesAvailable, sleep, TEST_SECRET, waitFor } from "./testing/harness.js";
 
 const available = await servicesAvailable();
 describe.runIf(available)("participant document permissions", () => {
@@ -184,8 +184,54 @@ describe.runIf(available)("participant document permissions", () => {
     expect(owner.doc.getMap(YDOC.files).has("main")).toBe(true);
     expect(owner.doc.getArray(YDOC.comments).length).toBe(0);
   });
+  it("stamps a lab's teacher as host, not the student who owns the copy", async () => {
+    const share = await h.createShare({
+      labId: "lab1",
+      access: {
+        default: "edit",
+        editKey: "key",
+        pinHash: null,
+        requireApproval: false,
+        nearby: false,
+      },
+    });
+    // What apps/api mints for a lab: the student owns the copy, the teacher controls it.
+    const token = (clientId: string, role: "owner" | "edit", controller: boolean) =>
+      signCollabToken(
+        {
+          shareId: share.id,
+          clientId,
+          name: "Tester",
+          color: "#336699",
+          role,
+          controller,
+          exp: Math.floor(Date.now() / 1000) + 600,
+        },
+        TEST_SECRET,
+      );
+    const student = await h.connect(server.webSocketURL, share.id, {
+      clientId: share.ownerId,
+      token: await token(share.ownerId, "owner", false),
+    });
+    const teacherId = generateClientId();
+    const teacher = await h.connect(server.webSocketURL, share.id, {
+      clientId: teacherId,
+      token: await token(teacherId, "edit", true),
+    });
+    const viewer = await h.connect(server.webSocketURL, share.id, { role: "view" });
+    await Promise.all([student.synced, teacher.synced, viewer.synced]);
+    student.provider.awareness?.setLocalStateField("fileId", "main");
+    teacher.provider.awareness?.setLocalStateField("fileId", "main");
+    await waitFor(() => {
+      const states = [...(viewer.provider.awareness?.getStates().values() ?? [])];
+      return states.filter((s) => s.fileId === "main").length === 2;
+    }, "both states received");
+    const states = [...(viewer.provider.awareness?.getStates().values() ?? [])];
+    expect(states.find((s) => s.user?.clientId === teacherId)?.host).toBe(true);
+    expect(states.find((s) => s.user?.clientId === share.ownerId)?.host).toBeUndefined();
+  });
   it("keeps file structure and language independent and ignores forged presenter awareness", async () => {
-    const { share, owner, editor } = await room();
+    const { share, owner, editor, viewer } = await room();
     await h.stores.shares.update(share.id, { access: { allowParticipantLanguage: true } });
     await h.publishPerm(share.id, { kind: "permissions", version: 1 });
     await waitFor(
@@ -202,6 +248,17 @@ describe.runIf(available)("participant document permissions", () => {
     expect(
       [...(owner.provider.awareness?.getStates().values() ?? [])].some((s) => s.presenting),
     ).toBe(false);
+    // The owner's state carries `host` from the server; an editor claiming it is stripped.
+    owner.provider.awareness?.setLocalStateField("fileId", "main");
+    editor.provider.awareness?.setLocalStateField("host", true);
+    editor.provider.awareness?.setLocalStateField("fileId", "main");
+    await waitFor(() => {
+      const hosts = (viewer.provider.awareness?.getStates() ?? new Map()).values();
+      const states = [...hosts].filter((s) => s.fileId === "main");
+      return states.length === 2 && states.filter((s) => s.host === true).length === 1;
+    }, "owner stamped as host");
+    const seen = [...(viewer.provider.awareness?.getStates().values() ?? [])];
+    expect(seen.find((s) => s.host === true)?.user.clientId).toBe(share.ownerId);
     editor.doc.getMap<Y.Map<unknown>>(YDOC.files).get("main")?.set("path", "renamed.py");
     await waitFor(
       () => editor.stateless.some((m) => (m as { type: string }).type === "permission_refused"),

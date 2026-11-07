@@ -344,6 +344,7 @@ function environment() {
       lineNumbers: prefs.lineNumbers,
       keymap: prefs.keymap,
       smoothTyping: prefs.smoothTyping,
+      remoteCursors: prefs.remoteCursors,
     },
     support: {
       indexedDB: safe(() => Boolean(window.indexedDB), false),

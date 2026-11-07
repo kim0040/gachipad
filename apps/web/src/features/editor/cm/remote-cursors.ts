@@ -1,18 +1,62 @@
-import { EditorSelection, StateEffect } from "@codemirror/state";
+import { EditorSelection, Facet, StateEffect, StateField } from "@codemirror/state";
 import { EditorView, type LayerMarker, layer, RectangleMarker, ViewPlugin } from "@codemirror/view";
 import { contrastRatio, PARTICIPANT_COLORS } from "@gachipad/highlight";
 import type { AwarenessState } from "@gachipad/shared";
 import * as Y from "yjs";
 import type { DocSession } from "../../../lib/collab/session";
+import type { RemoteCursorMode } from "../../../lib/prefs";
+import {
+  caretAt,
+  type DrawnCaret,
+  densityOf,
+  flashesName,
+  isPinned,
+  movedChanged,
+  nextCrowded,
+  peopleOnFile,
+  shouldGlide,
+} from "./remote-cursor-rules";
 
 /**
  * Remote cursors and selections drawn in CodeMirror layers instead of inline widgets. A layer
  * marker keeps its DOM element between updates, so moving a cursor only changes a CSS transform
  * and the browser animates it on the compositor (60 fps, no layout). The name flag fades in when
- * a person moves and out again when they go idle.
+ * a person really did something (their `moved` count changed), never because their caret was
+ * pushed, redrawn or scrolled back into view, and out again when they go idle. A caret pushed by
+ * text moves with that text; only a short move of the person's own glides.
  */
 
 export const refreshRemote = StateEffect.define<null>();
+
+/** This device's setting, reconfigured live by EditorPane. */
+export const remoteCursorMode = Facet.define<RemoteCursorMode, RemoteCursorMode>({
+  combine: (values) => values[0] ?? "auto",
+});
+
+const setCrowded = StateEffect.define<boolean>();
+const crowdedField = StateField.define<boolean>({
+  create: () => false,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setCrowded)) return effect.value;
+    return value;
+  },
+});
+
+const setSpotlight = StateEffect.define<string | null>();
+const spotlightField = StateField.define<string | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) if (effect.is(setSpotlight)) return effect.value;
+    return value;
+  },
+});
+
+/** Highlights a person's carets (the participant list is on them), or none. */
+export function spotlightRemote(view: EditorView | null, clientId: string | null): void {
+  if (view && view.state.field(spotlightField, false) !== clientId) {
+    view.dispatch({ effects: setSpotlight.of(clientId) });
+  }
+}
 
 const INK = "#0a0c10";
 
@@ -34,10 +78,13 @@ const FLAG_VISIBLE_MS = 3000;
 
 interface Remote {
   awarenessId: number;
+  clientId: string;
   name: string;
   color: string;
   anchor: number;
   head: number;
+  presenter: boolean;
+  host: boolean;
 }
 
 function absolute(rel: unknown, doc: Y.Doc, ytext: Y.Text): number | null {
@@ -72,33 +119,55 @@ export function collectRemotes(
     if (anchor === null || head === null) continue;
     remotes.push({
       awarenessId,
+      clientId: state.user.clientId,
       name: state.user.name,
       color: state.user.color,
       anchor: Math.min(anchor, length),
       head: Math.min(head, length),
+      presenter: state.presenting === true,
+      host: state.host === true,
     });
   }
   return remotes.sort((a, b) => a.awarenessId - b.awarenessId);
 }
 
+interface CaretLook {
+  x: number;
+  y: number;
+  height: number;
+  color: string;
+  name: string;
+  /** Counts this person's flashes, so a marker with a new one is never taken for the old one. */
+  flashes: number;
+  /** Flash the name now. */
+  flash: boolean;
+  /** The person's own move, not text pushing the caret: a short one glides. */
+  active: boolean;
+  /** The name stays on with no animation. */
+  pinned: boolean;
+  /** Hovered, or highlighted from the participant list: full strength and the name. */
+  spot: boolean;
+}
+
 class CaretMarker implements LayerMarker {
   constructor(
     readonly id: number,
-    readonly x: number,
-    readonly y: number,
-    readonly height: number,
-    readonly color: string,
-    readonly name: string,
+    readonly look: CaretLook,
   ) {}
 
   eq(other: CaretMarker): boolean {
+    const a = this.look;
+    const b = other.look;
     return (
       this.id === other.id &&
-      this.x === other.x &&
-      this.y === other.y &&
-      this.height === other.height &&
-      this.color === other.color &&
-      this.name === other.name
+      a.x === b.x &&
+      a.y === b.y &&
+      a.height === b.height &&
+      a.color === b.color &&
+      a.name === b.name &&
+      a.flashes === b.flashes &&
+      a.pinned === b.pinned &&
+      a.spot === b.spot
     );
   }
 
@@ -111,29 +180,46 @@ class CaretMarker implements LayerMarker {
     flag.className = "cm-remote-caret-flag";
     root.append(bar, flag);
     this.apply(root);
-    this.flash(root);
+    if (this.look.flash) this.flash(root);
     return root;
   }
 
   update(dom: HTMLElement, old: LayerMarker): boolean {
-    const previous = old as CaretMarker;
+    const previous = (old as CaretMarker).look;
     // The layer updates every marker when one of them changes; the others stay as they are.
-    if (this.eq(previous)) return true;
+    if (this.eq(old as CaretMarker)) return true;
+    const { active, height, x, y } = this.look;
+    if (previous.x !== x || previous.y !== y) {
+      // In the same style pass as the transform: without it the caret lands in this frame and a
+      // glide still under way ends here too.
+      dom.toggleAttribute(
+        "data-glide",
+        shouldGlide(active, x - previous.x, y - previous.y, height),
+      );
+    }
     this.apply(dom);
-    if (previous.id !== this.id) this.flash(dom);
-    else if (previous.x !== this.x || previous.y !== this.y) this.flash(dom);
+    if (this.look.flash) this.flash(dom);
     return true;
   }
 
   private apply(root: HTMLElement) {
-    root.style.transform = `translate3d(${this.x}px, ${this.y}px, 0)`;
-    root.style.height = `${this.height}px`;
-    root.style.setProperty("--rc", this.color);
-    root.style.setProperty("--rc-fg", labelColorFor(this.color));
+    const { x, y, height, color, name, pinned, spot } = this.look;
+    root.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    root.style.height = `${height}px`;
+    root.style.setProperty("--rc", color);
+    root.style.setProperty("--rc-fg", labelColorFor(color));
     // On the first rows the flag would be clipped above the editor, so it hangs below instead.
-    root.classList.toggle("is-top", this.y < 22);
+    root.classList.toggle("is-top", y < 22);
+    root.toggleAttribute("data-pinned", pinned);
+    root.toggleAttribute("data-spot", spot);
+    // Without the flash attributes no animation is left to start over when this ends.
+    if (pinned || spot) {
+      delete root.dataset.flag;
+      delete root.dataset.flagFrom;
+      delete root.dataset.flashed;
+    }
     const flag = root.lastElementChild;
-    if (flag && flag.textContent !== this.name) flag.textContent = this.name;
+    if (flag && flag.textContent !== name) flag.textContent = name;
   }
 
   /**
@@ -271,9 +357,14 @@ function needsRedraw(update: import("@codemirror/view").ViewUpdate): boolean {
     update.docChanged ||
     update.viewportChanged ||
     update.geometryChanged ||
+    update.startState.facet(remoteCursorMode) !== update.state.facet(remoteCursorMode) ||
+    update.startState.field(crowdedField) !== update.state.field(crowdedField) ||
+    update.startState.field(spotlightField) !== update.state.field(spotlightField) ||
     update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshRemote)))
   );
 }
+
+type AwarenessChange = { added: number[]; updated: number[]; removed: number[] };
 
 export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string) {
   // Both layers draw from the same positions; resolving them is O(document) per cursor, so they
@@ -312,54 +403,206 @@ export function remoteCursors(session: DocSession, ytext: Y.Text, fileId: string
     },
   });
 
+  const awareness = session.provider.awareness;
+  const selfClientId = () =>
+    (awareness?.getLocalState() as Partial<AwarenessState> | null)?.user?.clientId;
+  const countPeople = () =>
+    peopleOnFile(
+      (awareness?.getStates().values() ?? []) as Iterable<Partial<AwarenessState>>,
+      fileId,
+      selfClientId(),
+    );
+
+  // Who did something since the last draw (their `moved` changed), and the count last seen. A peer
+  // whose new position cannot be resolved yet (its text is still on the way) stays in `active`.
+  const lastMoved = new Map<number, unknown>();
+  const active = new Set<number>();
+  const flashes = new Map<number, number>();
+  let textChanged = false;
+  let drawn: DrawnCaret[] = [];
+  let pointer: { x: number; y: number } | null = null;
+  let hovered: number | null = null;
+  // Escape hid this caret's name: it stays hidden until the pointer has left it.
+  let dismissed: number | null = null;
+
+  const hoverAt = (view: EditorView, base: { left: number; top: number }): number | null => {
+    if (!pointer) return null;
+    const hit = caretAt(
+      drawn,
+      (pointer.x - base.left) / view.scaleX,
+      (pointer.y - base.top) / view.scaleY,
+    );
+    if (hit !== dismissed) dismissed = null;
+    return hit === dismissed ? null : hit;
+  };
+
   const carets = layer({
     above: true,
     class: "cm-remote-carets",
     update: needsRedraw,
     markers(view) {
       const base = layerBase(view);
-      const markers: KeyedMarker[] = [];
+      const { doc, selection } = view.state;
+      const mode = view.state.facet(remoteCursorMode);
+      const crowded = view.state.field(crowdedField);
+      const spotlight = view.state.field(spotlightField);
+      const following = (awareness?.getLocalState() as Partial<AwarenessState> | null)?.following;
+      const pushedByText = textChanged;
+      textChanged = false;
+
+      const placed: { remote: Remote; caret: DrawnCaret; wasActive: boolean }[] = [];
       for (const remote of remotesOf(view)) {
+        const wasActive = active.delete(remote.awarenessId);
         const coords = view.coordsAtPos(remote.head, remote.head > remote.anchor ? -1 : 1);
         if (!coords) continue;
-        markers.push({
-          key: String(remote.awarenessId),
-          marker: new CaretMarker(
-            remote.awarenessId,
-            Math.round(((coords.left - base.left) / view.scaleX) * 10) / 10,
-            Math.round(((coords.top - base.top) / view.scaleY) * 10) / 10,
-            Math.max(14, (coords.bottom - coords.top) / view.scaleY),
-            remote.color,
-            remote.name,
-          ),
+        placed.push({
+          remote,
+          wasActive,
+          caret: {
+            id: remote.awarenessId,
+            x: Math.round(((coords.left - base.left) / view.scaleX) * 10) / 10,
+            y: Math.round(((coords.top - base.top) / view.scaleY) * 10) / 10,
+            height: Math.max(14, (coords.bottom - coords.top) / view.scaleY),
+          },
         });
       }
+      drawn = placed.map((entry) => entry.caret);
+      hovered = hoverAt(view, base);
+
+      const markers: KeyedMarker[] = placed.map(({ remote, caret, wasActive }) => {
+        const pinned = isPinned(mode, crowded, {
+          presenter: remote.presenter,
+          followed: remote.clientId === following,
+          host: remote.host,
+        });
+        const spot = hovered === remote.awarenessId || spotlight === remote.clientId;
+        // Lines come from the document: the other person may be far outside the rendered text.
+        const flash =
+          wasActive &&
+          !pinned &&
+          !spot &&
+          flashesName(
+            mode,
+            crowded,
+            Math.abs(doc.lineAt(remote.head).number - doc.lineAt(selection.main.head).number),
+          );
+        const count = (flashes.get(remote.awarenessId) ?? 0) + (flash ? 1 : 0);
+        if (flash) flashes.set(remote.awarenessId, count);
+        return {
+          key: String(remote.awarenessId),
+          marker: new CaretMarker(remote.awarenessId, {
+            x: caret.x,
+            y: caret.y,
+            height: caret.height,
+            color: remote.color,
+            name: remote.name,
+            flashes: count,
+            flash,
+            active: wasActive && !pushedByText,
+            pinned,
+            spot,
+          }),
+        };
+      });
       return [new MarkerGroup(markers)];
     },
   });
 
   // Awareness changes arrive outside CodeMirror's update cycle: poke the layers once per frame.
   const watcher = ViewPlugin.define((view) => {
-    const awareness = session.provider.awareness;
     let frame = 0;
-    const onChange = () => {
-      version++;
+    let hoverFrame = 0;
+    const refresh = () => view.dispatch({ effects: refreshRemote.of(null) });
+    const schedule = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        view.dispatch({ effects: refreshRemote.of(null) });
+        const crowded = view.state.field(crowdedField);
+        const next = nextCrowded(crowded, countPeople());
+        view.dispatch({
+          effects: [refreshRemote.of(null), ...(next === crowded ? [] : [setCrowded.of(next)])],
+        });
       });
     };
+    // Peers already here have a count to compare with: their first move after I open the file is
+    // a move, not a first sighting.
+    for (const [id, state] of awareness?.getStates() ?? []) {
+      if (id !== awareness?.clientID) lastMoved.set(id, (state as Partial<AwarenessState>).moved);
+    }
+    const onChange = ({ added, updated, removed }: AwarenessChange) => {
+      version++;
+      for (const id of removed) {
+        lastMoved.delete(id);
+        active.delete(id);
+        flashes.delete(id);
+        if (dismissed === id) dismissed = null;
+      }
+      for (const id of [...added, ...updated]) {
+        if (id === awareness?.clientID) continue;
+        const state = awareness?.getStates().get(id) as Partial<AwarenessState> | undefined;
+        if (!state) continue;
+        if (state.fileId !== fileId) active.delete(id);
+        else if (movedChanged(lastMoved.get(id), state.moved)) active.add(id);
+        lastMoved.set(id, state.moved);
+      }
+      schedule();
+    };
+    const onMouseMove = (event: MouseEvent) => {
+      pointer = { x: event.clientX, y: event.clientY };
+      if (hoverFrame) return;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        if (!drawn.length && hovered === null) return;
+        const hit = hoverAt(view, layerBase(view));
+        if (hit === hovered) return;
+        hovered = hit;
+        refresh();
+      });
+    };
+    const onMouseLeave = () => {
+      pointer = null;
+      dismissed = null;
+      if (hovered === null) return;
+      hovered = null;
+      refresh();
+    };
+    // Seen on the way down and left alone: Vim mode and the search panel use Escape too.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || hovered === null) return;
+      dismissed = hovered;
+      hovered = null;
+      refresh();
+    };
     awareness?.on("change", onChange);
+    view.scrollDOM.addEventListener("mousemove", onMouseMove, { passive: true });
+    view.scrollDOM.addEventListener("mouseleave", onMouseLeave, { passive: true });
+    view.dom.addEventListener("keydown", onKeyDown, { capture: true, passive: true });
     return {
+      update(update) {
+        if (update.docChanged) textChanged = true;
+      },
       destroy() {
         awareness?.off("change", onChange);
+        view.scrollDOM.removeEventListener("mousemove", onMouseMove);
+        view.scrollDOM.removeEventListener("mouseleave", onMouseLeave);
+        view.dom.removeEventListener("keydown", onKeyDown, { capture: true });
         if (frame) cancelAnimationFrame(frame);
+        if (hoverFrame) cancelAnimationFrame(hoverFrame);
       },
     };
   });
 
-  return [selections, carets, watcher, remoteCursorTheme];
+  return [
+    crowdedField.init(() => nextCrowded(false, countPeople())),
+    spotlightField,
+    EditorView.editorAttributes.compute([remoteCursorMode, crowdedField], (state) => ({
+      "data-remote-cursors": densityOf(state.facet(remoteCursorMode), state.field(crowdedField)),
+    })),
+    selections,
+    carets,
+    watcher,
+    remoteCursorTheme,
+  ];
 }
 
 const remoteCursorTheme = EditorView.baseTheme({
