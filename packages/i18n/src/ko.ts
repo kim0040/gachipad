@@ -1274,7 +1274,7 @@ export const ko: KoDictionary = {
   "tour.dropTip.label": "파일 추가 팁",
   "tour.dropTip.body": "main.py 같은 파일을 화면으로 끌어다 놓으면 바로 추가돼요.",
   "tour.dropTip.touchBody": "파일 올리기 버튼으로 파일이나 .zip을 추가할 수 있어요.",
-  "tour.dropTip.openAction": "업로드 열기",
+  "tour.dropTip.openAction": "파일 올리기",
   "tour.dropTip.dismissAction": "팁 닫기",
   "tour.language.title": "언어",
   "tour.language.body":

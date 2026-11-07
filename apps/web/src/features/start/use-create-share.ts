@@ -117,7 +117,8 @@ export function useCreateShare() {
       } else fail(error);
     } finally {
       run.finish();
-      setPendingFiles(false);
+      // A run that timed out ends late: by then the busy state can be a newer run's.
+      if (!createPending()) setPendingFiles(false);
     }
   };
 

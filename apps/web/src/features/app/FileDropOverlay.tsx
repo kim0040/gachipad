@@ -34,7 +34,7 @@ export function FileDropOverlay({ view }: { view: FileDropView | null }) {
           aria-hidden="true"
           data-testid="file-drop-overlay"
           data-mode={view.busy ? "busy" : denied ? "denied" : view.mode}
-          className={`ui-appear-fade pointer-events-none fixed inset-x-0 bottom-0 z-[calc(var(--z-modal)+1)] flex items-center justify-center bg-bg/90 p-3 ${
+          className={`ui-appear-fade pointer-events-none fixed inset-x-0 bottom-0 z-[calc(var(--z-modal)+1)] flex items-center justify-center bg-bg/95 p-3 ${
             view.mode === "add" ? "top-12" : "top-0"
           }`}
         >

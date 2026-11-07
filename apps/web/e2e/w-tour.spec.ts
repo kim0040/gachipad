@@ -776,6 +776,20 @@ test("Escape dismisses the tip wherever focus is", async ({ browser }) => {
   }
 });
 
+test("Escape in the editor is the editor's, and leaves the tip alone", async ({ browser }) => {
+  const { owner, all } = await ownerWithCompany(browser, "EscapeEditor");
+  try {
+    const { page } = owner;
+    await expect(tip(page)).toBeVisible();
+    await page.locator(".cm-content").focus();
+    await page.keyboard.press("Escape");
+    await expect(tip(page)).toBeVisible();
+    expect(await tipStored(page)).toBeNull();
+  } finally {
+    await closeAll(...all);
+  }
+});
+
 test("another tab ending the tip ends it here too", async ({ browser }) => {
   const { owner, all } = await ownerWithCompany(browser, "Tabs");
   try {
@@ -934,7 +948,7 @@ test("at 320px the tip points at the upload button and does not widen the page",
     const { page } = owner;
     await expect(tip(page)).toBeVisible();
     await expect(page.getByTestId("drop-tip-text")).toHaveText(
-      "Use the upload button to add files or a .zip.",
+      "Use the Upload files button to add files or a .zip.",
     );
     const box = await tip(page).boundingBox();
     expect(box).not.toBeNull();

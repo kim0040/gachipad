@@ -64,10 +64,12 @@ export function beginCreate(
     },
   };
   const timer = setTimeout(() => {
+    // Past commit the share exists and only opening it is slow: the buttons come back, with no error.
+    const reached = state === "committed";
     state = "over";
     controller.abort();
     release(run);
-    onTimeout();
+    if (!reached) onTimeout();
   }, timeoutMs);
   current = run;
   for (const listener of listeners) listener();

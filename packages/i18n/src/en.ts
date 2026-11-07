@@ -1282,7 +1282,7 @@ export const en = {
   "tour.dropTip.label": "Tip: adding files",
   "tour.dropTip.body": "Drag a file like main.py onto the window to add it right away.",
   "tour.dropTip.touchBody": "Use the Upload files button to add files or a .zip.",
-  "tour.dropTip.openAction": "Open upload",
+  "tour.dropTip.openAction": "Upload files",
   "tour.dropTip.dismissAction": "Dismiss tip",
   "tour.language.title": "Language",
   "tour.language.body":

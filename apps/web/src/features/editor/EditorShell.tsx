@@ -541,7 +541,8 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
     const onPaste = (event: ClipboardEvent) => {
       if (event.defaultPrevented || !pasteIsForPage(event.target)) return;
       const files = pastedFiles(event.clipboardData);
-      if (files.length === 0) return;
+      // A screenshot pasted while focus is outside the editor was never meant to be a file here.
+      if (files.length === 0 || files.every((file) => file.type.startsWith("image/"))) return;
       event.preventDefault();
       void importRef.current(files);
     };

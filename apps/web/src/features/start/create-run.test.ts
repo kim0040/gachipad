@@ -38,6 +38,15 @@ describe("beginCreate", () => {
     expect(run?.signal.aborted).toBe(true);
   });
 
+  it("frees the page without an error when only opening the new share is slow", () => {
+    const onTimeout = vi.fn();
+    const run = beginCreate(onTimeout, 1000);
+    run?.commit();
+    vi.advanceTimersByTime(1000);
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(createPending()).toBe(false);
+  });
+
   it("does not time out a run that finished", () => {
     const timedOut = vi.fn();
     beginCreate(timedOut)?.finish();

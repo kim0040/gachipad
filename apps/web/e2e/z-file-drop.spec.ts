@@ -794,6 +794,12 @@ test("a file pasted with focus outside the editor is added; a field keeps its ow
     await page.waitForTimeout(300);
     await expect(page.getByTestId("tab-image.png")).toHaveCount(0);
 
+    // A screenshot with focus outside the editor is not a file someone meant to add.
+    const shot = [{ name: "image.png", content: [0x89, 0x50, 0x4e, 0x47, 0], type: "image/png" }];
+    await paste(page, "body", shot, []);
+    await page.waitForTimeout(300);
+    await expect(page.getByText("not a text file", { exact: false })).toHaveCount(0);
+
     // In a field the paste is the field's.
     await page.evaluate(() => {
       const input = document.createElement("input");

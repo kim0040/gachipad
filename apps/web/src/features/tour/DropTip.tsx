@@ -97,14 +97,18 @@ export function DropTip() {
     if (hadFocus) viewRef.current?.focus();
   }, [viewRef]);
 
-  // Wherever focus is, and left for others to see too: Vim mode and the search panel use Escape.
+  // Outside the places that have their own Escape, and left for others to see too.
   useEffect(() => {
     if (!visible) return;
     // The Escape that closed the tour or a dialog can bring the tip in while it is still on its way
     // to this listener: that one was not meant for the tip.
     const shownAt = performance.now();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && event.timeStamp >= shownAt) dismiss();
+      if (event.key !== "Escape" || event.timeStamp < shownAt) return;
+      // There it closes the search panel, leaves Vim's insert mode or closes a menu: not about the tip.
+      const target = event.target as Partial<Pick<Element, "closest">> | null;
+      if (target?.closest?.('.cm-editor, [role="menu"], [role="dialog"], [role="listbox"]')) return;
+      dismiss();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
