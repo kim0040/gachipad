@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTIVITY_QUIET_MS,
+  BUSY_ENTER_PEOPLE,
+  BUSY_LEAVE_PEOPLE,
   CARET_HIT_SLOP_PX,
-  CROWD_ENTER_PEOPLE,
-  CROWD_LEAVE_PEOPLE,
+  CROWDED_ENTER_PEOPLE,
+  CROWDED_LEAVE_PEOPLE,
+  type CrowdLevel,
   caretAt,
   densityOf,
   FLAG_ROOM_PX,
@@ -10,41 +14,65 @@ import {
   flashesName,
   GLIDE_MAX_LINES,
   GLIDE_MAX_X_PX,
+  glidesIn,
   isPinned,
-  linesApart,
+  MAX_BUSY_NAMES,
   movedChanged,
-  NEAR_CURSOR_LINES,
-  nextCrowded,
+  nextCrowdLevel,
   peopleOnFile,
   shouldGlide,
+  startedAfterQuiet,
 } from "./remote-cursor-rules";
 
 const nobody = { presenter: false, followed: false, host: false };
 
-describe("crowd hysteresis", () => {
-  it("uses the limits the spec names: in at 6, out at 4", () => {
-    expect(CROWD_ENTER_PEOPLE).toBe(6);
-    expect(CROWD_LEAVE_PEOPLE).toBe(4);
+describe("crowd levels", () => {
+  it("uses the limits the spec names: busy in at 4 and out at 2, crowded in at 8 and out at 6", () => {
+    expect(BUSY_ENTER_PEOPLE).toBe(4);
+    expect(BUSY_LEAVE_PEOPLE).toBe(2);
+    expect(CROWDED_ENTER_PEOPLE).toBe(8);
+    expect(CROWDED_LEAVE_PEOPLE).toBe(6);
   });
 
-  it("enters only at the upper limit", () => {
-    expect(nextCrowded(false, CROWD_ENTER_PEOPLE - 1)).toBe(false);
-    expect(nextCrowded(false, CROWD_ENTER_PEOPLE)).toBe(true);
+  it("enters each level only at its upper limit", () => {
+    expect(nextCrowdLevel("few", 3)).toBe("few");
+    expect(nextCrowdLevel("few", 4)).toBe("busy");
+    expect(nextCrowdLevel("few", 7)).toBe("busy");
+    expect(nextCrowdLevel("busy", 7)).toBe("busy");
+    expect(nextCrowdLevel("busy", 8)).toBe("crowded");
   });
 
-  it("stays crowded between the limits and leaves only at the lower one", () => {
-    expect(nextCrowded(true, CROWD_ENTER_PEOPLE - 1)).toBe(true);
-    expect(nextCrowded(true, CROWD_LEAVE_PEOPLE + 1)).toBe(true);
-    expect(nextCrowded(true, CROWD_LEAVE_PEOPLE)).toBe(false);
+  it("stays busy between the limits and leaves only at the lower one", () => {
+    expect(nextCrowdLevel("busy", 3)).toBe("busy");
+    expect(nextCrowdLevel("busy", 2)).toBe("few");
+    expect(nextCrowdLevel("busy", 1)).toBe("few");
+  });
+
+  it("stays crowded between the limits and drops to busy at the lower one", () => {
+    expect(nextCrowdLevel("crowded", 7)).toBe("crowded");
+    expect(nextCrowdLevel("crowded", 6)).toBe("busy");
+    expect(nextCrowdLevel("crowded", 3)).toBe("busy");
+  });
+
+  it("lands on the right level at once after a jump", () => {
+    expect(nextCrowdLevel("few", 10)).toBe("crowded");
+    expect(nextCrowdLevel("few", 8)).toBe("crowded");
+    expect(nextCrowdLevel("crowded", 2)).toBe("few");
+    expect(nextCrowdLevel("crowded", 1)).toBe("few");
   });
 
   it("does not flap for a head count going back and forth between the limits", () => {
-    let crowded = false;
-    const seen = [6, 5, 6, 5, 5, 6].map((people) => {
-      crowded = nextCrowded(crowded, people);
-      return crowded;
+    let level: CrowdLevel = "few";
+    const seen = [4, 3, 4, 3, 3, 4].map((people) => {
+      level = nextCrowdLevel(level, people);
+      return level;
     });
-    expect(seen).toEqual([true, true, true, true, true, true]);
+    expect(seen).toEqual(["busy", "busy", "busy", "busy", "busy", "busy"]);
+    const crowd = [8, 7, 8, 7, 7, 8].map((people) => {
+      level = nextCrowdLevel(level, people);
+      return level;
+    });
+    expect(crowd).toEqual(["crowded", "crowded", "crowded", "crowded", "crowded", "crowded"]);
   });
 });
 
@@ -106,64 +134,71 @@ describe("shouldGlide", () => {
 });
 
 describe("modes", () => {
-  it("is crowded only in auto with a crowd, and carets is its own density", () => {
-    expect(densityOf("auto", true)).toBe("crowded");
-    expect(densityOf("auto", false)).toBe("normal");
-    expect(densityOf("moving", true)).toBe("normal");
-    expect(densityOf("always", true)).toBe("normal");
-    expect(densityOf("carets", false)).toBe("carets");
-    expect(densityOf("carets", true)).toBe("carets");
-  });
-
-  it("flashes near people only when crowded", () => {
-    expect(flashesName("auto", false, 1000)).toBe(true);
-    expect(flashesName("auto", true, NEAR_CURSOR_LINES)).toBe(true);
-    expect(flashesName("auto", true, 0)).toBe(true);
-    expect(flashesName("auto", true, NEAR_CURSOR_LINES + 1)).toBe(false);
-  });
-
-  it("flashes everyone in moving however many people are here", () => {
-    expect(flashesName("moving", true, 1000)).toBe(true);
-    expect(flashesName("moving", false, 1000)).toBe(true);
-  });
-
-  it("never flashes in always or carets", () => {
-    for (const crowded of [false, true]) {
-      expect(flashesName("always", crowded, 0)).toBe(false);
-      expect(flashesName("carets", crowded, 0)).toBe(false);
+  it("is busy or crowded only in auto, and carets is its own density", () => {
+    expect(densityOf("auto", "few")).toBe("normal");
+    expect(densityOf("auto", "busy")).toBe("busy");
+    expect(densityOf("auto", "crowded")).toBe("crowded");
+    for (const level of ["few", "busy", "crowded"] as const) {
+      expect(densityOf("moving", level)).toBe("normal");
+      expect(densityOf("always", level)).toBe("normal");
+      expect(densityOf("carets", level)).toBe("carets");
     }
   });
 
-  it("pins the presenter and follow target outside carets; the host only when crowded", () => {
+  it("glides in normal and carets only", () => {
+    expect(glidesIn("normal")).toBe(true);
+    expect(glidesIn("carets")).toBe(true);
+    expect(glidesIn("busy")).toBe(false);
+    expect(glidesIn("crowded")).toBe(false);
+  });
+
+  it("flashes every activity in normal", () => {
+    expect(flashesName("normal", false, 0)).toBe(true);
+    expect(flashesName("normal", true, 5)).toBe(true);
+  });
+
+  it("flashes in busy only a start, and only while fewer than two names show", () => {
+    expect(MAX_BUSY_NAMES).toBe(2);
+    expect(flashesName("busy", true, 0)).toBe(true);
+    expect(flashesName("busy", true, 1)).toBe(true);
+    expect(flashesName("busy", true, 2)).toBe(false);
+    expect(flashesName("busy", true, 3)).toBe(false);
+    expect(flashesName("busy", false, 0)).toBe(false);
+  });
+
+  it("never flashes in crowded or carets", () => {
+    for (const density of ["crowded", "carets"] as const) {
+      expect(flashesName(density, true, 0)).toBe(false);
+      expect(flashesName(density, false, 0)).toBe(false);
+    }
+  });
+
+  it("counts a start after at least ten quiet seconds, or a first sighting", () => {
+    expect(ACTIVITY_QUIET_MS).toBe(10_000);
+    expect(startedAfterQuiet(undefined, 1000)).toBe(true);
+    expect(startedAfterQuiet(1000, 1000 + ACTIVITY_QUIET_MS)).toBe(true);
+    expect(startedAfterQuiet(1000, 1000 + ACTIVITY_QUIET_MS - 1)).toBe(false);
+    expect(startedAfterQuiet(1000, 1001)).toBe(false);
+  });
+
+  it("pins the presenter and follow target outside carets; the host only when busy or crowded", () => {
     for (const mode of ["auto", "moving"] as const) {
-      for (const crowded of [false, true]) {
-        expect(isPinned(mode, crowded, { ...nobody, presenter: true })).toBe(true);
-        expect(isPinned(mode, crowded, { ...nobody, followed: true })).toBe(true);
-        expect(isPinned(mode, crowded, nobody)).toBe(false);
+      for (const level of ["few", "busy", "crowded"] as const) {
+        expect(isPinned(mode, level, { ...nobody, presenter: true })).toBe(true);
+        expect(isPinned(mode, level, { ...nobody, followed: true })).toBe(true);
+        expect(isPinned(mode, level, nobody)).toBe(false);
       }
     }
-    expect(isPinned("auto", true, { ...nobody, host: true })).toBe(true);
-    expect(isPinned("auto", false, { ...nobody, host: true })).toBe(false);
-    expect(isPinned("moving", true, { ...nobody, host: true })).toBe(false);
+    expect(isPinned("auto", "crowded", { ...nobody, host: true })).toBe(true);
+    expect(isPinned("auto", "busy", { ...nobody, host: true })).toBe(true);
+    expect(isPinned("auto", "few", { ...nobody, host: true })).toBe(false);
+    expect(isPinned("moving", "crowded", { ...nobody, host: true })).toBe(false);
   });
 
   it("pins everyone in always and nobody in carets", () => {
-    expect(isPinned("always", false, nobody)).toBe(true);
+    expect(isPinned("always", "few", nobody)).toBe(true);
     const everything = { presenter: true, followed: true, host: true };
-    expect(isPinned("carets", true, everything)).toBe(false);
-  });
-});
-
-describe("linesApart", () => {
-  const lineHeight = 20;
-
-  it("counts rows on the screen when both carets are drawn: a long wrapped line is not one line", () => {
-    expect(linesApart(0, 500, 100, lineHeight)).toBe(20);
-    expect(linesApart(0, 160, 100, lineHeight)).toBe(NEAR_CURSOR_LINES);
-  });
-
-  it("counts lines of the document when my caret is not drawn", () => {
-    expect(linesApart(7, 500, null, lineHeight)).toBe(7);
+    expect(isPinned("carets", "crowded", everything)).toBe(false);
   });
 });
 

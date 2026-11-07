@@ -2,6 +2,7 @@ import { LANGUAGES } from "@gachipad/highlight";
 import { defaultSettings } from "@gachipad/shared";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PREFS, FONT_SIZE_MAX, FONT_SIZE_MIN, KEYMAPS, TAB_SIZES } from "../../lib/prefs";
+import { BUSY_ENTER_PEOPLE, CROWDED_ENTER_PEOPLE } from "../editor/cm/remote-cursor-rules";
 import { GUIDE_PAGES, LEGACY_ANCHORS } from "../intro/nav";
 import { EDITOR_FACTS, FACTS } from "./facts";
 
@@ -27,9 +28,13 @@ describe("guide facts", () => {
 
   it("quote the drop and cursor numbers the task describes", () => {
     // From the product description of file drop and remote cursors: files over 5 MB are skipped,
-    // and with 6 or more people in a file the auto cursor mode quiets the carets.
+    // with 4 or more people in a file the auto cursor mode fades selections and shows names
+    // briefly, and with 8 or more it dims the carets too and shows no name by itself.
     expect(FACTS.importFileMB).toBe(5);
-    expect(FACTS.cursorCrowd).toBe(6);
+    expect(FACTS.cursorBusy).toBe(4);
+    expect(FACTS.cursorCrowd).toBe(8);
+    expect(FACTS.cursorBusy).toBe(BUSY_ENTER_PEOPLE);
+    expect(FACTS.cursorCrowd).toBe(CROWDED_ENTER_PEOPLE);
     // At most this many files at once is the most a share can hold.
     expect(FACTS.files).toBe(100);
   });

@@ -5,12 +5,18 @@ import type { RemoteCursorMode } from "../../../lib/prefs";
  * them numbers from the document and from what it last drew, and reads nothing else.
  */
 
-/** A file is crowded from this many distinct people on it, me included... */
-export const CROWD_ENTER_PEOPLE = 6;
-/** ...and stops being crowded at this many, so a class around the limit does not flap. */
-export const CROWD_LEAVE_PEOPLE = 4;
-/** In a crowded file only someone this many lines from my main cursor flashes a name. */
-export const NEAR_CURSOR_LINES = 3;
+/** A file is busy from this many distinct people on it, me included... */
+export const BUSY_ENTER_PEOPLE = 4;
+/** ...and stops being busy at this many, so a class around the limit does not flap. */
+export const BUSY_LEAVE_PEOPLE = 2;
+/** It is crowded from this many... */
+export const CROWDED_ENTER_PEOPLE = 8;
+/** ...and drops to busy at this many. */
+export const CROWDED_LEAVE_PEOPLE = 6;
+/** In a busy file a name flashes only for someone who starts after being quiet this long. */
+export const ACTIVITY_QUIET_MS = 10_000;
+/** In a busy file at most this many names flash at once. */
+export const MAX_BUSY_NAMES = 2;
 /** A caret glides only over a short distance: about one line down or up... */
 export const GLIDE_MAX_LINES = 1.5;
 /** ...and about twenty characters along it. Anything further jumps. */
@@ -20,8 +26,15 @@ export const CARET_HIT_SLOP_PX = 5;
 /** A flag above a caret needs this much of the visible editor over the caret, or it hangs below. */
 export const FLAG_ROOM_PX = 22;
 
-export function nextCrowded(crowded: boolean, people: number): boolean {
-  return crowded ? people > CROWD_LEAVE_PEOPLE : people >= CROWD_ENTER_PEOPLE;
+export type CrowdLevel = "few" | "busy" | "crowded";
+
+/** The level for `people` on a file, given the level it was at: enter at the upper limit, leave at the lower. */
+export function nextCrowdLevel(level: CrowdLevel, people: number): CrowdLevel {
+  const crowded =
+    level === "crowded" ? people > CROWDED_LEAVE_PEOPLE : people >= CROWDED_ENTER_PEOPLE;
+  if (crowded) return "crowded";
+  const busy = level === "few" ? people >= BUSY_ENTER_PEOPLE : people > BUSY_LEAVE_PEOPLE;
+  return busy ? "busy" : "few";
 }
 
 /** Distinct people on a file; two tabs of one person count once, and I am always on my own file. */
@@ -50,11 +63,16 @@ export function shouldGlide(active: boolean, dx: number, dy: number, lineHeight:
   return active && Math.abs(dy) <= lineHeight * GLIDE_MAX_LINES && Math.abs(dx) <= GLIDE_MAX_X_PX;
 }
 
-export type RemoteCursorDensity = "normal" | "crowded" | "carets";
+export type RemoteCursorDensity = "normal" | "busy" | "crowded" | "carets";
 
-export function densityOf(mode: RemoteCursorMode, crowded: boolean): RemoteCursorDensity {
+export function densityOf(mode: RemoteCursorMode, level: CrowdLevel): RemoteCursorDensity {
   if (mode === "carets") return "carets";
-  return mode === "auto" && crowded ? "crowded" : "normal";
+  return mode === "auto" && level !== "few" ? level : "normal";
+}
+
+/** Whether a person's own move may glide; with many people a caret lands at once. */
+export function glidesIn(density: RemoteCursorDensity): boolean {
+  return density === "normal" || density === "carets";
 }
 
 export interface PeerRole {
@@ -65,31 +83,35 @@ export interface PeerRole {
 }
 
 /** Whether a person's name stays on with no animation. */
-export function isPinned(mode: RemoteCursorMode, crowded: boolean, role: PeerRole): boolean {
+export function isPinned(mode: RemoteCursorMode, level: CrowdLevel, role: PeerRole): boolean {
   if (mode === "carets") return false;
   if (mode === "always") return true;
-  return role.presenter || role.followed || (role.host && densityOf(mode, crowded) === "crowded");
-}
-
-/** Whether a peer who just did something flashes their name, `lines` away from my main cursor. */
-export function flashesName(mode: RemoteCursorMode, crowded: boolean, lines: number): boolean {
-  if (mode === "carets" || mode === "always") return false;
-  return densityOf(mode, crowded) === "crowded" ? lines <= NEAR_CURSOR_LINES : true;
+  const density = densityOf(mode, level);
+  return (
+    role.presenter || role.followed || (role.host && (density === "busy" || density === "crowded"))
+  );
 }
 
 /**
- * How far a peer is from my main cursor in the distance `NEAR_CURSOR_LINES` means. A long wrapped
- * line is one line of the document and many on the screen, so rows on the screen count when both
- * carets are drawn; the document's lines when mine is not.
+ * Whether this activity began after the person had been quiet: their previous activity was at
+ * least `ACTIVITY_QUIET_MS` ago, or never seen.
  */
-export function linesApart(
-  documentLines: number,
-  peerY: number,
-  myY: number | null,
-  lineHeight: number,
-): number {
-  if (myY === null || lineHeight <= 0) return documentLines;
-  return Math.round(Math.abs(peerY - myY) / lineHeight);
+export function startedAfterQuiet(previousAt: number | undefined, now: number): boolean {
+  return previousAt === undefined || now - previousAt >= ACTIVITY_QUIET_MS;
+}
+
+/**
+ * Whether a peer who just did something flashes their name. `started` is whether it began after a
+ * quiet spell; `namesShowing` is how many flashed names are still on screen.
+ */
+export function flashesName(
+  density: RemoteCursorDensity,
+  started: boolean,
+  namesShowing: number,
+): boolean {
+  if (density === "normal") return true;
+  if (density === "busy") return started && namesShowing < MAX_BUSY_NAMES;
+  return false;
 }
 
 /** Whether a caret's flag would be clipped above the visible part of the editor. */

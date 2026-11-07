@@ -249,7 +249,7 @@ export const guideKo: Record<GuideKey, string> = {
     "사람이 많아도 화면이 어수선하지 않게, 다른 사람의 커서를 보이는 방식을 고를 수 있어요. 설정의 다른 사람 커서에서 바꿔요.",
   "guide.features.cursors.auto.title": "자동 (기본)",
   "guide.features.cursors.auto.body":
-    "한 파일에 {crowd}명 이상이 있으면 커서가 흐려지고, 내 커서 가까이에서 움직이는 사람의 이름만 보여요. 발표하는 사람, 내가 따라가는 사람, 소유자는 이름이 계속 보여요.",
+    "한 파일에 {busy}명 이상이면 선택 영역이 옅어지고 이름이 잠깐씩만 보여요. {crowd}명 이상이면 커서도 흐려지고 이름이 자동으로 뜨지 않아요. 발표하는 사람, 내가 따라가는 사람, 소유자는 이름이 계속 보여요.",
   "guide.features.cursors.moving.title": "움직일 때 이름 표시",
   "guide.features.cursors.moving.body": "커서가 움직이거나 입력할 때 이름이 보여요.",
   "guide.features.cursors.always.title": "이름 항상 표시",

@@ -254,7 +254,7 @@ export const guideEn = {
     "Choose how other people's cursors are shown, so a crowd does not clutter the page. Change it in Settings under Other people's cursors.",
   "guide.features.cursors.auto.title": "Auto (default)",
   "guide.features.cursors.auto.body":
-    "With {crowd} or more people in a file, cursors dim and names appear only for people moving near your cursor. The presenter, the person you follow and the owner keep their names.",
+    "With {busy} or more people in a file, selections fade and names appear only briefly. At {crowd} or more, cursors dim too and names stop appearing automatically. The presenter, the person you follow and the owner keep their names.",
   "guide.features.cursors.moving.title": "Names when moving",
   "guide.features.cursors.moving.body": "Names show when someone moves or types.",
   "guide.features.cursors.always.title": "Names always on",

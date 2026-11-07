@@ -148,7 +148,10 @@ export function FeaturesPage() {
         <Cards
           items={(["auto", "moving", "always", "carets"] as const).map((key) => ({
             title: t(`guide.features.cursors.${key}.title`),
-            body: t(`guide.features.cursors.${key}.body`, { crowd: FACTS.cursorCrowd }),
+            body: t(`guide.features.cursors.${key}.body`, {
+              busy: FACTS.cursorBusy,
+              crowd: FACTS.cursorCrowd,
+            }),
           }))}
         />
         <P>{t("guide.features.cursors.hover")}</P>
