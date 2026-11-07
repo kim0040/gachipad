@@ -339,6 +339,28 @@ describe("app update", () => {
       expect(tab.reload).not.toHaveBeenCalled();
     });
 
+    it("applies a worker still installing at load, which Workbox does not report", async () => {
+      const tab = browser();
+      const waiting = tab.registration.waiting;
+      tab.registration.waiting = null;
+      const listeners: Array<() => void> = [];
+      const installing = {
+        state: "installing",
+        addEventListener: (_name: string, handler: () => void) => void listeners.push(handler),
+      };
+      Object.assign(tab.registration, { installing });
+      await tab.load();
+      expect(tab.skipWaiting).not.toHaveBeenCalled();
+      for (const handler of listeners) handler();
+      await settle();
+      expect(tab.skipWaiting).not.toHaveBeenCalled();
+      installing.state = "installed";
+      tab.registration.waiting = waiting;
+      for (const handler of listeners) handler();
+      await settle();
+      expect(tab.skipWaiting).toHaveBeenCalledTimes(1);
+    });
+
     it("applies a worker that starts waiting after the registration is known", async () => {
       const tab = browser();
       const waiting = tab.registration.waiting;

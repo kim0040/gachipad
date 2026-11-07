@@ -26,7 +26,8 @@ export default defineConfig({
     tailwindcss(),
     thirdPartyLicenses(),
     VitePWA({
-      // A new build waits for the reload the update prompt offers; it never reloads a tab by itself.
+      // A new build waits for the reload the update prompt offers. Only a page nobody is using, with no
+      // document open in any tab, takes it by itself (lib/app-update.ts).
       registerType: "prompt",
       injectRegister: false,
       manifest: {

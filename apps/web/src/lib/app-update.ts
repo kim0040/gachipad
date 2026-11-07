@@ -88,6 +88,12 @@ export function startAppUpdates(): void {
         registration = value;
         // A worker already waiting at load fires onNeedRefresh before this, with no registration yet.
         void applyWhenIdle();
+        // Refreshed while the new build was still downloading: Workbox listens for updatefound, which
+        // has passed, so it never reports this worker as waiting.
+        const installing = value?.installing;
+        installing?.addEventListener("statechange", () => {
+          if (installing.state === "installed") void applyWhenIdle();
+        });
       },
     });
   }

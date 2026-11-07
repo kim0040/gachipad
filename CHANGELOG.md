@@ -9,7 +9,7 @@ text of its GitHub release (RELEASING.md).
 
 ### Added
 - A per-user "Other people's cursors" setting offers Auto (default), Names when moving, Names always on, and Cursors only options.
-- In Auto mode with 6 or more people on a file, carets and selections dim and names appear only for participants moving within 3 lines of your cursor, while the presenter, the followed user, and the owner or lab teacher keep their names.
+- In Auto mode with 4 or more people on a file, selections dim, carets jump without gliding, and names appear only briefly (up to two at a time) when idle participants move or type; with 8 or more, carets also dim and names never appear automatically, while the presenter, the followed user, and the owner or lab teacher keep their names.
 - Hovering a cursor shows its name, and hovering or focusing a participant in the people list highlights their cursor.
 - Files can be dropped anywhere on a share page with a full-window notice, dropped on the landing page to start a new share, or pasted into a share.
 - Dropping or uploading files reports each skipped file with its reason.
@@ -18,6 +18,7 @@ text of its GitHub release (RELEASING.md).
 
 ### Changed
 - A person's name now appears only when that person moves their cursor or types, not when other people's edits push their cursor along, and pushed cursors no longer slide.
+- Untouched pages with no documents being edited in any tab now auto-apply new builds so a single reload updates them, while tabs with active edits still require clicking the notification button.
 - The first-run tour shows once more to people who have seen it, because it now teaches adding files.
 - A file with the same name and the same content opens the existing file, and a file with the same name and different content is added as `main (2).py` so nothing is overwritten.
 - Folder drops leave out .git, node_modules, __pycache__, .venv, and similar folders.
@@ -33,6 +34,7 @@ text of its GitHub release (RELEASING.md).
 - Two files with the same path no longer hide one of them in the file tree.
 - People using reduced motion no longer see name tags that never go away.
 - Names on the top visible line are no longer cut off after scrolling.
+- Participant names no longer open when another user's cursor moves under a stationary mouse pointer.
 - The awareness size limit now counts bytes rather than characters.
 
 ## [1.1.1] - 2026-10-28

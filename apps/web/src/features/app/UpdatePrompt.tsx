@@ -6,7 +6,8 @@ import { useT } from "../../lib/i18n";
 
 /**
  * "A new version is available": shown after the server was updated. It never reloads on its own,
- * so nobody loses their place while editing; the reload happens on the button only.
+ * so nobody loses their place while editing; here the reload happens on the button only. A page
+ * nobody is using may take a waiting build by itself (applyWhenIdle in lib/app-update.ts).
  */
 export function UpdatePrompt() {
   const t = useT();
