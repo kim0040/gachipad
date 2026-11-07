@@ -81,13 +81,13 @@ install.cmd
 
 ### Collaborative editing
 - **Conflict-free sync**: Concurrent typing merges automatically via Yjs and Hocuspocus; offline edits merge cleanly upon reconnect.
-- **Presence and following**: Colored cursors and participant name tags with live view following and stable cursor blinking.
+- **Presence and following**: Colored cursors and participant name tags with cursor display settings, cursor hover and people list highlighting, live view following, and owner or lab teacher identification.
 - **Smooth typing**: 100 ms decelerating caret gliding and smooth opacity fading (solid caret with reduced motion).
 - **Code completion & language detection**: Keyword and word suggestions accepted with Tab, plus automatic language detection for plain text.
 - **Multi-file workspaces**: Organize up to 100 files in folder paths (`src/index.ts`) with automatic language detection from file names.
 - **200+ languages & themes**: Syntax highlighting for 200+ languages across four WCAG 2.2 AA compliant themes, with Vim, Emacs, and Sublime keymaps.
 - **Anchored comments**: Attach discussions to a line or range that hold their place as surrounding code moves.
-- **File handling**: Drag and drop files, folders, or `.zip` archives into the window; download individual files or export the share as a `.zip`.
+- **File handling**: Drag and drop files, folders, or `.zip` archives anywhere on a share page or onto the landing page, paste copied files, download individual files, or export the share as a `.zip`.
 - **Organization & templates**: Group shares with custom folders and up to 10 tags; start quickly with 16 built-in or custom templates.
 
 ### History
@@ -123,7 +123,7 @@ install.cmd
 2. **Invite**: Click **Share** (`⌃⌘S` on a Mac, `Ctrl+Alt+S` elsewhere) to copy the link, read out the 6-digit code or show the QR code.
 3. **Join**: Type the code on the home page, or open `/<code>` or `/<id>`.
 4. **Edit together**: Collaborate in real time with live cursors, highlighting and comments (`⌃⌘M` / `Ctrl+Alt+M`).
-5. **Manage files**: Add files and folders from the file panel, or drop files and `.zip` archives into the window.
+5. **Manage files**: Add files and folders from the file panel, paste copied files, or drop files and `.zip` archives anywhere on the page.
 6. **Review history**: As the owner, open **History** (`⌃⌘H` / `Ctrl+Alt+H`) to inspect revisions and diffs.
 7. **Export**: Download a file, or the whole share as a `.zip`.
 

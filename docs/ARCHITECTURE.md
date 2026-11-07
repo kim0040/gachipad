@@ -54,7 +54,7 @@ Y.Array "comments"  { id, fileId, anchor: RelativePosition(JSON), head: Relative
 ```
 
 - Server Y.Doc uses `gc: true`. The initial sync sends only the garbage-collected current state, so deleted text is never sent to a newly joining client.
-- Awareness state (`packages/shared` `AwarenessState`): `{ user: {clientId, name, color}, fileId, cursor?: {anchor, head} (Yjs relative), viewport?: {fromLine, toLine}, following?: clientId }`. Clients throttle awareness to ≤30 updates/s; the collab server drops updates beyond that per connection (counted in `gachipad_collab_awareness_dropped_total`), states over 4 KB, and states for Yjs clients another connection announced, and always sets `user` from the token.
+- Awareness state (`packages/shared` `AwarenessState`): `{ user: {clientId, name, color}, fileId, cursor?: {anchor, head} (Yjs relative), viewport?: {fromLine, toLine}, following?: clientId, presenting?: bool, moved?: number, host?: bool }`. `moved` counts a client's own edits and selection changes, so a receiver shows a name only when that person acted, never because other people's edits moved the caret. Collab sets `host` from the connection's controller flag and removes any value a client sent. Clients throttle awareness to ≤30 updates/s; the collab server drops updates beyond that per connection (counted in `gachipad_collab_awareness_dropped_total`), states over 4 KB, and states for Yjs clients another connection announced, and always sets `user` from the token.
 - Broadcast window: a doc with ≥ 8 connections sends document updates at once, together with any awareness changes waiting, and sends awareness-only changes at most once per 30 ms window (`COLLAB_BROADCAST_WINDOW_MS`, 0 turns it off). Every cursor fans out to everyone, so a class of 50 would otherwise get one message per cursor move each; batching cut the messages of a 50-person share by 62% with edit latency unchanged (docs/OPERATIONS.md §11). Smaller docs flush every event-loop turn as before.
 
 ## 5. MongoDB collections
@@ -139,7 +139,7 @@ All bodies and responses are zod schemas in `packages/shared`. Errors: `{error: 
 | `GET /api/shares` | my shares (owned ∪ saved), newest first, with language + preview + my `folder` and `tags` |
 | `PUT /api/shares/:id/labels` | a share in my shares: `{folder: string|null, tags: string[]}` (folder 1-60 chars, at most 10 tags of 1-30 chars, trimmed, duplicates removed case-insensitively; empty folder and no tags deletes the entry) → the stored labels |
 | `GET /api/templates` | code templates: built-in ones (`packages/shared/src/templates.ts`, `builtin: true`; their `name` and `description` are i18n keys such as `template.java.name`, resolved by the client, while templates from settings carry plain text) followed by `settings.templates`, each `{id, name, language, description, files: [{path, language?, content}], builtin}`. The web app creates a share from one with the normal `POST /api/shares` |
-| `GET /api/settings/public` | `{contact, anonymousTtlHours, historyRetentionDays, maxUploadMB, guestAllowed}` for the intro page and help text; no secrets |
+| `GET /api/settings/public` | `{contact, anonymousTtlHours, historyRetentionDays, maxUploadMB, maxDocBytes, guestAllowed}` for the intro page and help text; no secrets |
 | `GET /api/codes/:code` | → `{id}` or `{labId}` |
 | `POST /api/shares/:id/kick` | owner `{clientId, ban}` |
 | `GET /api/shares/:id/pending` / `POST …/pending/:clientId` | owner: list / `{approve}` |
