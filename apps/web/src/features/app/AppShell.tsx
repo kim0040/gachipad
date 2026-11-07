@@ -9,6 +9,7 @@ import { useWindowShortcuts } from "../../lib/use-shortcuts";
 import { TemplatePicker } from "../start/TemplatePicker";
 import { CommandPalette } from "./CommandPalette";
 import { EventToasts } from "./EventToasts";
+import { useFileDropGuard } from "./file-drop";
 import { ShortcutSheet } from "./ShortcutSheet";
 import { UpdatePrompt } from "./UpdatePrompt";
 import "./app.css";
@@ -27,6 +28,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const t = useT();
 
   useEffect(() => retainEvents(), []);
+  // A file dropped on no target must not make the browser open it and leave the app.
+  useFileDropGuard();
   // A cleanup that ran on its own (start, another account, a denial) may have left copies behind.
   useEffect(
     () => onLeftovers(() => toast({ title: t("toast.forgetFailed"), tone: "warning" })),

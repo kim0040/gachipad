@@ -245,6 +245,7 @@ export const ko: KoDictionary = {
   "editor.download.zipAction": "전체 .zip 다운로드",
   "editor.files.title": "파일",
   "editor.files.newAction": "새 파일",
+  "editor.files.uploadAction": "파일 올리기",
   "editor.files.nameLabel": "파일 이름",
   "editor.files.namePlaceholder": "main.py",
   "editor.files.deleteAction": "파일 삭제",
@@ -622,8 +623,37 @@ export const ko: KoDictionary = {
   "toast.youBanned": "소유자가 이 공유 입장을 막았어요",
   "toast.restored": "{time} 버전으로 복원했어요",
   "toast.settingsReset": "설정을 초기화했어요",
-  "toast.uploaded.other": "파일 {count}개를 올렸어요",
-  "toast.uploadFailed": "올리지 못했어요. 파일 크기를 확인한 뒤 다시 시도해 주세요.",
+  "toast.uploadFailed": "올리지 못했어요. 잠시 뒤에 다시 시도해 주세요.",
+  "toast.upload.noText": "텍스트 파일을 찾지 못했어요",
+  "toast.upload.noText.hint": "코드나 텍스트 파일, 폴더, .zip을 끌어다 놓아 주세요.",
+  "toast.import.added": "{name} 파일을 추가했어요",
+  "toast.import.addedMany.other": "파일 {count}개를 추가했어요",
+  "toast.import.renamed":
+    "{from} 파일이 이미 있고 내용이 달라서, 이 파일은 {to} 이름으로 추가했어요.",
+  "toast.import.renamedMore.other": "이름이 겹친 파일 {count}개도 번호를 붙여 추가했어요.",
+  "toast.import.duplicate": "{name} 파일은 같은 내용이 이미 있어서 다시 추가하지 않았어요.",
+  "toast.import.duplicateMany.other":
+    "같은 내용이 이미 있는 파일 {count}개는 다시 추가하지 않았어요.",
+  "toast.import.openedDuplicate": "같은 내용의 {name} 파일이 이미 있어서 그 파일을 열었어요",
+  "toast.import.openedDuplicateMany.other":
+    "같은 내용의 파일 {count}개가 이미 있어서 새로 만들지 않았어요",
+  "toast.import.none": "추가한 파일이 없어요",
+  "toast.import.empty": "끌어다 놓은 항목에서 파일을 찾지 못했어요",
+  "toast.import.reading.other": "파일 {count}개를 읽는 중이에요…",
+  "toast.import.skipped.other": "건너뛴 항목이 {count}개 있어요",
+  "toast.import.more.other": "외 {count}개",
+  "toast.import.skipTail.other": "{count}개: {reason}",
+  "toast.import.reason.binary": "텍스트 파일이 아니에요",
+  "toast.import.reason.tooBig": "{size}를 넘어요",
+  "toast.import.reason.unreadable": "읽지 못했어요",
+  "toast.import.reason.folder": "이 브라우저는 폴더를 읽지 못해요",
+  "toast.import.reason.excludedFolder": "자동으로 제외하는 폴더예요",
+  "toast.import.reason.tooMany": "한 공유에는 {max}개까지만 넣을 수 있어요",
+  "toast.import.reason.shareFull": "공유의 크기 한도를 넘어요",
+  "toast.import.reason.badPath": "경로를 쓸 수 없어요",
+  "toast.import.reason.zipTooMany": "압축 파일 안의 파일이 너무 많아요",
+  "toast.import.reason.zipTooBig": "압축을 풀면 너무 커요",
+  "toast.import.reason.zipBad": "읽을 수 없는 .zip이에요",
   "toast.undoAction": "실행 취소",
 
   // ── Upload ──
@@ -635,6 +665,14 @@ export const ko: KoDictionary = {
   "upload.progress.other": "파일 {count}개 올리는 중…",
   "upload.asShare": "여러 파일 공유로 열기",
   "upload.dropOnPerson": "사람에게 끌어다 놓으면 바로 보내요",
+  "upload.drop.add": "놓으면 이 공유에 추가돼요",
+  "upload.drop.new": "놓으면 새 공유가 만들어져요",
+  "upload.drop.formats": "파일, 폴더, .zip 모두 가능해요",
+  "upload.drop.pending": "새 공유를 만드는 중이에요…",
+  "upload.drop.deniedBody": "끌어다 놓아도 아무것도 추가되지 않아요",
+  "upload.denied.viewOnly": "보기 전용이라 파일을 추가할 수 없어요",
+  "upload.denied.locked": "공유가 잠겨 있어서 파일을 추가할 수 없어요",
+  "upload.denied.ownerOnly": "파일 추가는 소유자만 할 수 있어요",
 
   // ── Lab mode ──
   "lab.mode": "실습실 모드",
@@ -1131,7 +1169,11 @@ export const ko: KoDictionary = {
 
   // ── Empty and loading states ──
   "empty.file.title": "비어 있는 파일이에요",
-  "empty.file.body": "코드를 입력하거나 붙여넣으세요. 언어는 자동으로 감지해요.",
+  "empty.file.body":
+    "코드를 입력하거나 붙여넣고, 파일을 끌어다 놓아도 돼요. 언어는 자동으로 감지해요.",
+  "empty.file.bodyTouch": "코드를 입력하거나 붙여넣으세요. 파일은 위쪽의 올리기 버튼으로 추가해요.",
+  "empty.file.bodyType": "코드를 입력하거나 붙여넣으세요. 언어는 자동으로 감지해요.",
+  "empty.file.bodyReadOnly": "아직 비어 있는 파일이에요. 보기 전용이라 직접 입력할 수 없어요.",
   "empty.alone.title": "지금은 나뿐이에요",
   "empty.alone.body": "코드를 알려 주면 다른 사람이 입장할 수 있어요.",
 

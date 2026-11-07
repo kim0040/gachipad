@@ -42,6 +42,8 @@ import { getPrefs } from "../../lib/prefs";
 import { shortcutKeys } from "../../lib/shortcuts";
 import { useStore } from "../../lib/store";
 import { useWindowShortcuts } from "../../lib/use-shortcuts";
+import { FileDropOverlay } from "../app/FileDropOverlay";
+import { useFileDrop } from "../app/file-drop";
 import { TourMount } from "../tour/TourMount";
 import { copyAll, downloadFile, downloadZip, looksLikeSecret } from "./actions";
 import { EditorBanners } from "./banners";
@@ -49,8 +51,10 @@ import { CommentsPanel } from "./CommentsPanel";
 import { editorCommands } from "./cm/keymaps";
 import { useDocumentPermissions, useEditor } from "./context";
 import { showAloneHint } from "./doc-info";
-import { collectDroppedFiles } from "./dropped-files";
+import { useFilesDenial } from "./drop-permissions";
+import { collectDrop } from "./dropped-files";
 import { EditorPane } from "./EditorPane";
+import { useEmptyHint } from "./empty-hint";
 import { FileTabs, FileTree, useFileOps } from "./Files";
 import { canFormat, formatCode, minimalChange } from "./format-code";
 import { HistoryView } from "./HistoryView";
@@ -519,13 +523,18 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
 
   const dismissLanguageSuggestion = useCallback(() => setLanguageSuggestion(null), []);
 
-  const onDropFiles = useCallback(
-    (transfer: DataTransfer) => {
-      if (!canImport) return;
-      void collectDroppedFiles(transfer).then(importDropped);
-    },
-    [canImport, importDropped],
-  );
+  // Files dropped anywhere on the page (and pasted from a file manager) go through one importer.
+  const importRef = useRef(importDropped);
+  importRef.current = importDropped;
+  const denial = useFilesDenial();
+  const dropOverlay = useFileDrop({
+    mode: "add",
+    denied: denial,
+    // Read the transfer now, in the event: the browser empties it afterwards.
+    onDrop: (transfer) => void collectDrop(transfer).then((dropped) => importRef.current(dropped)),
+  });
+  const onPasteFiles = useCallback((files: File[]) => void importRef.current(files), []);
+  const emptyHint = useEmptyHint({ readOnly: ctx.readOnly, canImport });
 
   const tree = <FileTree ops={ops} />;
   const showSidebar = treeOpen && !narrow;
@@ -571,7 +580,8 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
                   onPaste={onPaste}
                   onType={onType}
                   onOpenComments={(ids) => ctx.openPanel("comments", ids[0])}
-                  onDropFiles={onDropFiles}
+                  onPasteFiles={onPasteFiles}
+                  emptyHint={emptyHint}
                 />
                 <AloneHint />
               </div>
@@ -588,6 +598,7 @@ export function EditorShell({ follow }: { follow: FollowResult }) {
         onDismissSuggestion={dismissLanguageSuggestion}
       />
 
+      <FileDropOverlay view={dropOverlay} />
       {ops.dialogs}
       <ShareDialog />
       <SettingsSheet />
