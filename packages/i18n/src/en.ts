@@ -379,6 +379,13 @@ export const en = {
   "settings.smoothTyping.label": "Smooth typing",
   "settings.smoothTyping.hint":
     "The cursor glides as you type. Off when your device is set to reduce motion.",
+  "settings.remoteCursors.label": "Other people's cursors",
+  "settings.remoteCursors.hint":
+    "Calmer on its own when many people are here. Hover a cursor to see the name.",
+  "settings.remoteCursors.auto": "Automatic",
+  "settings.remoteCursors.moving": "Names when moving",
+  "settings.remoteCursors.always": "Names always on",
+  "settings.remoteCursors.carets": "Cursors only",
   "settings.codeCompletion.label": "Code completion",
   "settings.keymap.label": "Key bindings",
   "settings.keymap.default": "Default",

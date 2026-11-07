@@ -399,6 +399,13 @@ export const ko: KoDictionary = {
   "settings.smoothTyping.label": "부드러운 입력",
   "settings.smoothTyping.hint":
     "입력할 때 커서가 부드럽게 움직여요. 기기에서 동작 줄이기가 켜져 있으면 꺼져요.",
+  "settings.remoteCursors.label": "다른 사람 커서",
+  "settings.remoteCursors.hint":
+    "사람이 많으면 자동으로 차분해져요. 커서에 마우스를 올리면 이름이 보여요.",
+  "settings.remoteCursors.auto": "자동",
+  "settings.remoteCursors.moving": "움직일 때 이름 표시",
+  "settings.remoteCursors.always": "이름 항상 표시",
+  "settings.remoteCursors.carets": "커서만 표시",
   "settings.codeCompletion.label": "코드 자동 완성",
   "settings.keymap.label": "키맵",
   "settings.keymap.default": "기본",

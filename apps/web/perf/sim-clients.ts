@@ -28,6 +28,8 @@ interface Sim {
   text: Y.Text;
   user: { clientId: string; name: string; color: string };
   writer: boolean;
+  /** What the editor's awareness bridge publishes: every move is real activity. */
+  moved: number;
 }
 
 /** A short text of code that fits one screen, with an empty last line for the browser to type on. */
@@ -94,6 +96,7 @@ export class SimClients {
         text: doc.getText("file:main"),
         user: { clientId: session.clientId, name: session.name, color: session.color },
         writer: member.writer,
+        moved: 0,
       });
     });
   }
@@ -208,6 +211,7 @@ export class SimClients {
       fileId: "main",
       cursor: { anchor: position(anchorIndex), head: position(index) },
       viewport: { fromLine: 1, toLine: 40 },
+      moved: ++sim.moved,
     });
   }
 }

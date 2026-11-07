@@ -27,7 +27,7 @@ import {
   readOnlyExtension,
   themeExtension,
 } from "./cm/extensions";
-import { remoteCursors } from "./cm/remote-cursors";
+import { remoteCursorMode, remoteCursors } from "./cm/remote-cursors";
 import { searchPhrases } from "./cm/search-phrases";
 import { type EditorInfo, setInitialLength } from "./doc-info";
 import "./editor.css";
@@ -56,6 +56,7 @@ interface Compartments {
   keymap: Compartment;
   readOnly: Compartment;
   completion: Compartment;
+  remoteCursors: Compartment;
 }
 
 function hasFiles(transfer: DataTransfer | null): boolean {
@@ -96,6 +97,7 @@ export function EditorPane(props: EditorPaneProps) {
       keymap: new Compartment(),
       readOnly: new Compartment(),
       completion: new Compartment(),
+      remoteCursors: new Compartment(),
     };
     compartments.current = parts;
     const current = latest.current;
@@ -132,6 +134,7 @@ export function EditorPane(props: EditorPaneProps) {
               theme,
             ),
           ),
+          parts.remoteCursors.of(remoteCursorMode.of(initialPrefs.remoteCursors)),
           remoteCursors(session, ytext, fileId),
           awarenessBridge(session, fileId),
           commentsExtension({
@@ -214,6 +217,7 @@ export function EditorPane(props: EditorPaneProps) {
         parts.font.reconfigure(fontExtension(prefs.fontSize)),
         parts.editing.reconfigure(editingExtension(prefs)),
         parts.gutters.reconfigure(gutterExtension(prefs.lineNumbers)),
+        parts.remoteCursors.reconfigure(remoteCursorMode.of(prefs.remoteCursors)),
       ],
     });
   }, [ready, themeId, prefs, viewRef]);

@@ -11,6 +11,10 @@ export type Keymap = (typeof KEYMAPS)[number];
 export const OFFLINE_COPY_CHOICES = ["undecided", "yes", "no"] as const;
 export type OfflineCopyChoice = (typeof OFFLINE_COPY_CHOICES)[number];
 
+/** How other people's cursors show: by head count, on every move, names always on, or bars only. */
+export const REMOTE_CURSOR_MODES = ["auto", "moving", "always", "carets"] as const;
+export type RemoteCursorMode = (typeof REMOTE_CURSOR_MODES)[number];
+
 export interface EditorPrefs {
   /** `auto` follows the app theme: Slate in dark, Paper in light. */
   editorTheme: ThemeId | "auto";
@@ -22,6 +26,7 @@ export interface EditorPrefs {
   keymap: Keymap;
   /** The cursor glides as you type (none under `prefers-reduced-motion`). */
   smoothTyping: boolean;
+  remoteCursors: RemoteCursorMode;
   /** Offer language-aware completions while editing. */
   codeCompletion: boolean;
   /** Show invites as system notifications while the tab is in the background. */
@@ -46,6 +51,7 @@ export const DEFAULT_PREFS: EditorPrefs = {
   lineNumbers: true,
   keymap: "default",
   smoothTyping: true,
+  remoteCursors: "auto",
   codeCompletion: true,
   notifications: false,
   offlineCopy: "undecided",
@@ -70,6 +76,7 @@ export function sanitizePrefs(input: unknown): EditorPrefs {
   const theme = raw.editorTheme;
   const keymap = raw.keymap;
   const offlineCopy = raw.offlineCopy;
+  const remoteCursors = raw.remoteCursors;
   return {
     editorTheme: isThemeId(theme) ? theme : "auto",
     fontSize: num("fontSize", d.fontSize, FONT_SIZE_MIN, FONT_SIZE_MAX),
@@ -79,6 +86,7 @@ export function sanitizePrefs(input: unknown): EditorPrefs {
     lineNumbers: bool("lineNumbers", d.lineNumbers),
     keymap: KEYMAPS.find((k) => k === keymap) ?? d.keymap,
     smoothTyping: bool("smoothTyping", d.smoothTyping),
+    remoteCursors: REMOTE_CURSOR_MODES.find((m) => m === remoteCursors) ?? d.remoteCursors,
     codeCompletion: bool("codeCompletion", d.codeCompletion),
     notifications: bool("notifications", d.notifications),
     // Before the choice existed the setting was a boolean that defaulted to on without asking:

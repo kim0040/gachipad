@@ -137,8 +137,16 @@
   width: 0;
   pointer-events: none;
   will-change: transform;
+}
+
+/* A short move of the person's own; a caret pushed by text lands with that text. */
+.cm-remote-caret[data-glide] {
   /* Only transform animates: the compositor moves it, layout never reruns. */
   transition: transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.cm-remote-caret[data-spot] {
+  z-index: 1;
 }
 
 .cm-remote-caret-bar {
@@ -164,6 +172,37 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 0;
+}
+
+.cm-remote-caret[data-pinned] .cm-remote-caret-flag,
+.cm-remote-caret[data-spot] .cm-remote-caret-flag {
+  opacity: 1;
+}
+
+/* Many people, or bars only: a person's selection should not cover the code they share. */
+.cm-editor[data-remote-cursors="crowded"] .cm-remote-selection,
+.cm-editor[data-remote-cursors="carets"] .cm-remote-selection {
+  background: color-mix(in srgb, var(--rc) 12%, transparent);
+}
+
+.cm-editor[data-remote-cursors="crowded"]
+  .cm-remote-caret:not([data-pinned], [data-spot])
+  .cm-remote-caret-bar {
+  opacity: 0.6;
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  .cm-editor[data-remote-cursors="crowded"]
+    .cm-remote-caret:not([data-pinned], [data-spot])
+    .cm-remote-caret-bar {
+    opacity: 1;
+  }
+}
+
+@media (forced-colors: active) {
+  .cm-editor[data-remote-cursors] .cm-remote-selection {
+    background: transparent;
+  }
 }
 
 .cm-remote-caret.is-top .cm-remote-caret-flag {
@@ -246,14 +285,42 @@
   }
 }
 
+@keyframes cm-remote-flag-still-a {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes cm-remote-flag-still-b {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/*
+ * Reduced motion: the same flag for the same time, with no fade or slide. The base styles force
+ * every animation to last ~0, so the wait is the delay: the first keyframe holds for that long
+ * (fill backwards), then the instant animation lands on the last one (fill forwards).
+ */
 @media (prefers-reduced-motion: reduce) {
-  .cm-remote-caret {
+  .cm-remote-caret[data-glide] {
     transition: none;
   }
 
-  .cm-remote-caret[data-flag] .cm-remote-caret-flag {
-    animation: none;
-    opacity: 1;
+  .cm-remote-caret[data-flag="a"] .cm-remote-caret-flag,
+  .cm-remote-caret[data-flag="a"][data-flag-from="shown"] .cm-remote-caret-flag {
+    animation: cm-remote-flag-still-a 1ms linear 2.34s both;
+  }
+
+  .cm-remote-caret[data-flag="b"] .cm-remote-caret-flag,
+  .cm-remote-caret[data-flag="b"][data-flag-from="shown"] .cm-remote-caret-flag {
+    animation: cm-remote-flag-still-b 1ms linear 2.34s both;
   }
 }
 
