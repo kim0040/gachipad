@@ -255,14 +255,14 @@ export const guideEn = {
   "guide.features.cursors.auto.title": "Auto (default)",
   "guide.features.cursors.auto.body":
     "With {crowd} or more people in a file, cursors dim and names appear only for people moving near your cursor. The presenter, the person you follow and the owner keep their names.",
-  "guide.features.cursors.moving.title": "While moving",
-  "guide.features.cursors.moving.body": "A name shows only while that cursor is moving.",
-  "guide.features.cursors.always.title": "Always",
+  "guide.features.cursors.moving.title": "Names when moving",
+  "guide.features.cursors.moving.body": "Names show when someone moves or types.",
+  "guide.features.cursors.always.title": "Names always on",
   "guide.features.cursors.always.body": "Everyone's name is shown all the time.",
   "guide.features.cursors.carets.title": "Cursors only",
   "guide.features.cursors.carets.body": "Colored cursors without names.",
   "guide.features.cursors.hover":
-    "In every mode, hovering a cursor shows its name, and hovering a person in the list highlights their cursor.",
+    "In every mode, hovering a cursor shows its name, and hovering or focusing a person in the people list highlights their cursor.",
 
   "guide.features.lab.title": "Lab mode",
   "guide.features.lab.lead":

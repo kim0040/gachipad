@@ -394,7 +394,7 @@ export const en = {
   "settings.remoteCursors.label": "Other people's cursors",
   "settings.remoteCursors.hint":
     "Calmer on its own when many people are here. Hover a cursor to see the name.",
-  "settings.remoteCursors.auto": "Automatic",
+  "settings.remoteCursors.auto": "Auto",
   "settings.remoteCursors.moving": "Names when moving",
   "settings.remoteCursors.always": "Names always on",
   "settings.remoteCursors.carets": "Cursors only",

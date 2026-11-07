@@ -250,14 +250,14 @@ export const guideKo: Record<GuideKey, string> = {
   "guide.features.cursors.auto.title": "자동 (기본)",
   "guide.features.cursors.auto.body":
     "한 파일에 {crowd}명 이상이 있으면 커서가 흐려지고, 내 커서 가까이에서 움직이는 사람의 이름만 보여요. 발표하는 사람, 내가 따라가는 사람, 소유자는 이름이 계속 보여요.",
-  "guide.features.cursors.moving.title": "움직일 때만",
-  "guide.features.cursors.moving.body": "커서가 움직이는 동안에만 이름을 보여요.",
-  "guide.features.cursors.always.title": "항상",
-  "guide.features.cursors.always.body": "모든 사람의 이름을 늘 보여요.",
-  "guide.features.cursors.carets.title": "커서만",
+  "guide.features.cursors.moving.title": "움직일 때 이름 표시",
+  "guide.features.cursors.moving.body": "커서가 움직이거나 입력할 때 이름이 보여요.",
+  "guide.features.cursors.always.title": "이름 항상 표시",
+  "guide.features.cursors.always.body": "모든 사람의 이름이 항상 보여요.",
+  "guide.features.cursors.carets.title": "커서만 표시",
   "guide.features.cursors.carets.body": "이름 없이 색깔 있는 커서만 보여요.",
   "guide.features.cursors.hover":
-    "어느 방식이든 커서에 마우스를 올리면 이름이 보이고, 목록에서 사람에게 올리면 그 사람의 커서가 강조돼요.",
+    "어느 방식이든 커서에 마우스를 올리면 이름이 보이고, 목록에서 사람에게 마우스를 올리거나 포커스하면 그 사람의 커서가 강조돼요.",
 
   "guide.features.lab.title": "실습실 모드",
   "guide.features.lab.lead":
