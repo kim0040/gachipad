@@ -95,7 +95,12 @@ test("remote caret identity survives selection changes and another participant l
     const activeFlag = carets.filter({ hasText: staying.name }).locator(".cm-remote-caret-flag");
     await expect(activeFlag).toHaveCSS("opacity", "1");
     // A move during the idle fade keeps the flag visible instead of fading from zero again.
-    await owner.page.waitForTimeout(2450);
+    // The wait counts from the last flash on the owner's page (the fade starts at 2.34 s of
+    // 3 s), so a slow runner's typing and polling cannot eat the time the move needs to arrive.
+    const flashed = Number(
+      await carets.filter({ hasText: staying.name }).getAttribute("data-flashed"),
+    );
+    await owner.page.waitForFunction((at) => performance.now() - at >= 2400, flashed);
     await staying.page.keyboard.press("ArrowLeft");
     await expect(carets.filter({ hasText: staying.name })).toHaveAttribute(
       "data-flag-from",
@@ -193,13 +198,18 @@ async function watchCarets(page: Page) {
       attributes: true,
       attributeFilter: ["data-flag"],
     });
+    // A glide lasts about 100 ms, shorter than a frame on a slow runner, so count it when the
+    // transition starts rather than by looking for it on every frame.
+    document.addEventListener("transitionrun", (event) => {
+      const caret = event.target as Element;
+      if (event.propertyName !== "transform" || !caret.classList.contains("cm-remote-caret"))
+        return;
+      const name = caret.textContent ?? "";
+      probe.glides[name] = (probe.glides[name] ?? 0) + 1;
+    });
     const frame = () => {
       for (const caret of document.querySelectorAll(".cm-remote-caret")) {
         const name = caret.textContent ?? "";
-        const gliding = caret
-          .getAnimations()
-          .some((a) => a instanceof CSSTransition && a.transitionProperty === "transform");
-        if (gliding) probe.glides[name] = (probe.glides[name] ?? 0) + 1;
         const opacity = Number(getComputedStyle(caret.lastElementChild as Element).opacity);
         const seen = probe.opacities[name] ?? [];
         if (seen[seen.length - 1] !== opacity) seen.push(opacity);
@@ -675,9 +685,13 @@ test("a crowded file: no name by itself, dimmer bars and selections, the host pi
     // The list stays on screen in the narrowest window.
     await page.setViewportSize({ width: 320, height: 640 });
     await expect(list).toBeVisible();
-    const box = await list.boundingBox();
-    expect(box?.x).toBeGreaterThanOrEqual(0);
-    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(320);
+    // The popover moves on the next frame after the resize, so keep measuring until it has.
+    await expect
+      .poll(async () => {
+        const box = await list.boundingBox();
+        return box !== null && box.x >= 0 && box.x + box.width <= 320;
+      })
+      .toBe(true);
     await screenshot(page, "people-list-320");
     await page.setViewportSize({ width: 1280, height: 720 });
     const row = list.getByRole("button").first();
