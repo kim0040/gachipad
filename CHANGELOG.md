@@ -7,6 +7,21 @@ text of its GitHub release (RELEASING.md).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-11
+
+### Upgrade notes
+
+- No configuration changes or data migrations are required for this update.
+- If you enabled automatic updates or ran `update.sh` or `backup.sh` with `sudo` on 1.2.0 or older, files such as `.env` and `backups/` may now belong to root. This causes `./backup.sh` to fail with Permission denied and `./update.sh --check` to report `installed version '' is not a release`. Update with `sudo ./update.sh`, then run `sudo ./update.sh --check` once: 1.2.1 hands the files back when it finishes. Servers with automatic updates enabled install 1.2.1 on their next scheduled run and repair the files on the run after that.
+
+### Fixed
+
+- Running deploy scripts as root, with `sudo`, or from the automatic-update timer no longer leaves `.env`, backups, rollback copies, and state files readable only by root. When the command finishes, ownership is returned to the owner of the installation folder. Certificates and keys in `tls/` keep their owner so Caddy can still read them.
+- An update run as root no longer leaves extracted scripts owned by user ID 1001, the account that built the release. If another local account has that ID, that account could edit scripts run as root by the automatic-update timer. The next run as root returns these files to the owner of the installation folder.
+- `update.sh`, `backup.sh` and `restore.sh` explain an unreadable `.env` and print the command that fixes it, instead of reporting that the installed version is not a release.
+- `update.sh` reports a GitHub rate limit (HTTP 403 or 429; 60 requests an hour per public IP without a login) directly instead of asking you to check connectivity, and names the HTTP status of other failures.
+- The operator guide (docs/OPERATIONS.md 15.0) now includes a quick guide for updating now, enabling and checking automatic updates, updating on Windows, and applying the permission fix above.
+
 ## [1.2.0] - 2026-11-08
 
 ### Upgrade notes
@@ -198,7 +213,8 @@ The first release: real-time code sharing for one network, with no outside servi
   edit keys in every open tab. Shares with a PIN or approval load their copy only after the server
   accepts the connection. Lab previews never keep copies.
 
-[Unreleased]: https://github.com/kim0040/gachipad/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/kim0040/gachipad/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/kim0040/gachipad/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/kim0040/gachipad/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/kim0040/gachipad/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/kim0040/gachipad/compare/v1.0.1...v1.1.0
