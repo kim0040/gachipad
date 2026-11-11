@@ -832,7 +832,7 @@ chmod 700 migrate-db.sh.new && mv migrate-db.sh.new migrate-db.sh && ./migrate-d
 - 기존 데이터베이스를 자동으로 사전 백업합니다.
 - 새 번들의 컨테이너 이미지를 로드하고 관리 스크립트와 Compose 설정을 갱신합니다.
 - 기존 `.env` 설정을 그대로 유지하면서 신규 추가된 환경 변수 키가 있을 경우 기본값을 보충합니다.
-- 컨테이너를 롤링 재시작하고 헬스체크 정상 완료를 검증합니다.
+- 서비스를 잠시 중단하고 DB를 백업한 뒤 새 버전을 시작하여 헬스체크가 정상인지 확인합니다. 실패하면 이전 버전과 백업한 DB로 되돌립니다.
 
 ---
 
@@ -1167,6 +1167,45 @@ API와 Collab은 `gachipad` DB의 `readWrite` 역할만 가진 `gachipad_app` �
 
 새 릴리스가 나오면 관리 콘솔의 **업데이트** 탭에 표시되고, 운영자가 서버에서 `./update.sh` 한 줄로 적용합니다. 원하면 정한 시간에 자동으로 적용하게 할 수 있습니다. 사용하는 서비스(GitHub 릴리스, GHCR 공개 패키지, 공개 저장소의 GitHub Actions, 인증 없는 GitHub API)는 모두 무료입니다(15.10).
 
+### 15.0 빠른 안내
+
+아래 명령은 모두 설치 폴더(`install.sh`를 실행한 폴더)에서 실행합니다.
+
+**지금 최신 버전으로 업데이트 (인터넷이 연결된 서버)**
+```sh
+./update.sh --check    # 설치된 버전과 최신 버전만 확인하고 아무것도 바꾸지 않음
+./update.sh            # 확인 질문에 y를 입력하면 DB를 백업한 뒤 업데이트하고, 실패하면 이전 버전으로 되돌림
+```
+- 같은 주 버전 안의 업데이트(예: 1.1.1 → 1.2.0)는 설정 변경이나 데이터 이전 없이 두 명령만으로 완료됩니다. 업데이트 중에는 서비스가 잠시(보통 1분 이내) 중단되며, 열려 있던 편집 화면은 자동으로 다시 연결됩니다.
+- 업데이트 후 브라우저에 "새 버전이 있어요" 알림이 표시되면 새로고침을 누르십시오.
+- 인터넷이 연결되지 않은 서버는 릴리스 페이지에서 번들과 `.sha256` 파일을 받아 `./upgrade.sh ../gachipad-<버전>-linux-amd64.tar.gz`로 업데이트합니다(15.5).
+
+**자동 업데이트 켜기와 확인**
+```sh
+sudo ./update.sh --enable-auto --at 04:00 --policy minor   # 매일 04시 무렵 1.x 안의 새 릴리스를 적용
+systemctl list-timers gachipad-update.timer               # 다음 실행 시각
+sudo systemctl start gachipad-update.service              # 지금 한 번 실행해 보기
+tail state/update.log                                     # 결과 (관리 콘솔 업데이트 탭에도 표시)
+```
+- `--policy patch`(기본값)는 버그 수정 릴리스만 받습니다. 예를 들어 1.1.1에서 1.2.0으로는 올리지 않으므로, 기능 릴리스까지 받으려면 `minor`를 선택하십시오. 주 버전(2.0.0 등)은 어느 정책이든 자동으로 올리지 않습니다.
+- systemd가 없는 서버는 root의 crontab에 등록되며 `sudo crontab -l`로 확인합니다.
+- 자동 업데이트를 끄려면 `sudo ./update.sh --disable-auto`를 실행합니다. 자세한 내용은 15.6을 참고하십시오.
+
+**Windows (WSL 2)**
+```powershell
+.\deploy\gachipad.ps1 update --check
+.\deploy\gachipad.ps1 update --yes
+```
+자동 업데이트 타이머는 WSL 내부에서 동작하므로 WSL이 꺼져 있으면 실행되지 않습니다. Windows 서버에서는 관리 콘솔에 새 버전이 표시될 때 위 명령으로 직접 업데이트하는 것을 권장합니다.
+
+**`sudo` 실행 후 권한 오류 발생 시 (1.2.0 이하)**
+1.2.0 이하 버전에서 자동 업데이트를 활성화했거나 `sudo`로 업데이트·백업을 실행한 적이 있다면, 이후 일반 계정으로 실행한 `./backup.sh`가 `Permission denied`로 실패하거나 `./update.sh --check`에서 `installed version '' is not a release`라고 잘못 안내될 수 있습니다. 이는 root가 생성한 `.env`와 백업 파일을 일반 계정에서 읽지 못해 발생합니다. 설치 폴더에서 다음 두 명령을 실행하십시오.
+```sh
+sudo ./update.sh            # root 권한으로 1.2.1 이상으로 업데이트
+sudo ./update.sh --check    # 1.2.1 이상의 스크립트가 끝날 때 파일 소유권을 설치 폴더 소유자에게 돌려줌
+```
+1.2.1부터는 root로 실행하더라도 명령 종료 시 파일 소유권을 설치 폴더 소유자에게 돌려줍니다. 자동 업데이트를 켜 둔 서버는 1.2.1을 받은 뒤 다음 실행 시 자동으로 복구됩니다. `tls` 폴더의 인증서와 키는 Caddy가 계속 읽을 수 있도록 소유자를 변경하지 않습니다. 설치 폴더 자체가 root 소유라면 모든 명령을 `sudo`로 실행하십시오.
+
 ### 15.1 업데이트 확인: 무엇이 언제 밖으로 나가나
 - `UPDATE_CHECK=on`(기본값)이면 API 서버가 시작하고 3~5분 뒤, 그 뒤로 약 12시간(±30분)마다 한 번 확인합니다. API 인스턴스가 여러 개여도 Valkey 잠금으로 배포 전체에서 한 번만 요청합니다. 시작과 요청 처리를 막지 않는 백그라운드 작업입니다.
 - 보내는 것: `GET https://api.github.com/repos/<UPDATE_REPO>/releases/latest` 하나(`UPDATE_CHANNEL=prerelease`이면 `/releases?per_page=20`). 헤더는 `User-Agent: gachipad/<현재 버전>`, `Accept`, `X-GitHub-Api-Version`, 그리고 이전 응답의 `If-None-Match`(ETag)뿐입니다. 인증 정보, 쿠키, 설치 식별자, 사용 통계는 보내지 않습니다. GitHub는 요청을 보낸 서버의 공인 IP를 볼 수 있습니다.
@@ -1218,7 +1257,7 @@ API는 `/api/admin/update`(조회)와 `/api/admin/update/check`(즉시 확인, 1
 ### 15.6 자동 업데이트 (선택, 기본 꺼짐)
 ```sh
 sudo ./update.sh --enable-auto --at 04:00 --policy patch     # 켜기
-sudo ./update.sh --enable-auto --dry-run                     # 무엇을 설치할지 보기만
+sudo ./update.sh --enable-auto --dry-run                     # 등록할 타이머(또는 cron) 내용만 출력하고 아무것도 바꾸지 않음
 sudo ./update.sh --disable-auto                              # 끄기
 ```
 - systemd 서비스는 `KillMode=mixed`, `TimeoutStopSec=30min`으로 복구 중 자식 프로세스를 보존하며, Docker보다 뒤에 시작하여 종료 시 Docker보다 먼저 멈춥니다. 복구 중 추가 HUP/INT/TERM은 무시합니다. 대형 DB에서 복구가 30분을 넘으면 서비스 override로 stop timeout을 늘리십시오.

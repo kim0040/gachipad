@@ -361,7 +361,7 @@ mdns_install_tools() (
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  tar xzf "$bundle" -C "$stage" || status=$?
+  tar --no-same-owner -xzf "$bundle" -C "$stage" || status=$?
   if [ "$status" = 0 ]; then
     local source
     source="$(find "$stage" -maxdepth 2 -name mdns.sh -exec dirname {} \; | head -n 1)"
@@ -755,8 +755,16 @@ record_database_backend() {
 
 # One installation-wide lock, inherited only by children of its holder. The mkdir fallback
 # deliberately leaves a stale lock after SIGKILL: an operator must verify the PID before removal.
+# A run as root before 1.2.1 (sudo, or the automatic-update timer) could leave .env root-only.
+assert_readable_env() {
+  if [ -e .env ] && [ ! -r .env ]; then
+    die "cannot read .env as $(id -un): an earlier run as root left the files of this installation owned by root. Run a command once with sudo, for example sudo ./update.sh --check: from 1.2.1 on it gives the files back when it finishes."
+  fi
+}
+
 install_lock() {
   local path owner boot boot_time lock_time
+  assert_readable_env
   path="$(pwd -P)/state/install.lock"
   mkdir -p state
   INSTALL_LOCK_OWNED=0
@@ -799,8 +807,33 @@ install_lock() {
   export GACHIPAD_LOCK_PATH="$path" GACHIPAD_LOCK_PID="$$" GACHIPAD_LOCK_KIND
 }
 
+# give_back_files dir: a run as root (sudo, or the automatic-update timer) leaves what it wrote
+# owned by root, and the operator's next ./backup.sh or ./update.sh could not read .env or write
+# backups/; before 1.2.1 it also kept the release builder's user ID on extracted scripts, which a
+# local user with that ID could then edit. Hand every file and folder in the installation that the
+# owner of the installation folder does not own back to that owner, except:
+#   - anything on another device (a mounted backup disk may hold other files);
+#   - tls folders (and their rollback copies): Caddy reads those keys as root without
+#     CAP_DAC_OVERRIDE, so a root-only key must stay root-owned;
+#   - links and multiply linked files, so no file outside the installation is handed over.
+# That owner can already edit update.sh, which the timer runs as root, so this grants no new
+# privilege. Linux hosts (GNU find); elsewhere it does nothing.
+give_back_files() {
+  [ "$(id -u)" = 0 ] || return 0
+  local owner device entry
+  owner="$(stat -c '%u:%g' "$1" 2>/dev/null)" || return 0
+  [[ "$owner" =~ ^[0-9]+:[0-9]+$ ]] && [ "${owner%%:*}" != 0 ] || return 0
+  device="$(stat -c '%d' "$1" 2>/dev/null)" || return 0
+  while IFS= read -r -d '' entry; do
+    [ "${entry%% *}" = "$device" ] || continue
+    chown -h "$owner" -- "${entry#* }" 2>/dev/null || true
+  done < <(find "$1" -xdev -mindepth 1 \( -type d -name tls -prune \) -o \
+    \( ! -uid "${owner%%:*}" \( -type d -o -type f -links 1 \) -printf '%D %p\0' \) 2>/dev/null)
+}
+
 install_unlock() {
   if [ "${INSTALL_LOCK_OWNED:-0}" = 1 ]; then
+    give_back_files "${GACHIPAD_LOCK_PATH%/state/install.lock}"
     rm -f "$GACHIPAD_LOCK_PATH.d/owner" "$GACHIPAD_LOCK_PATH.d/boot"
     rmdir "$GACHIPAD_LOCK_PATH.d"
   fi

@@ -251,6 +251,51 @@ grep -q 9.9.9 "$F/run.log" && fail "read a tag from inside a release body"
 [ "$(envv GACHIPAD_VERSION)" = 1.0.0 ] || fail "version changed"
 ok "--check: 1.1.0 within 1.x, 2.0.0 needs --allow-major; pre-release 1.2.0-rc.1 not offered"
 
+step "release list HTTP errors and an unreadable .env say what to do"
+UPDATE_API_URL="$base/missing" run ./update.sh --check && fail "--check passed without a release list"
+grep -q 'cannot fetch release list from .*(HTTP 404); check UPDATE_REPO' "$F/run.log" || fail "HTTP status not named"
+if command -v wget >/dev/null; then
+  printf '%s\n' 'command() { if [ "${1:-}" = -v ] && [ "${2:-}" = curl ]; then return 1; fi; builtin command "$@"; }' >"$F/no-curl-env"
+  BASH_ENV="$F/no-curl-env" UPDATE_API_URL="$base/missing" run ./update.sh --check && fail "wget --check passed without a release list"
+  grep -q 'cannot fetch release list from .*(HTTP 404); check UPDATE_REPO' "$F/run.log" || fail "wget HTTP status not named"
+fi
+rm -f "$I/state/update.json" "$I/state/last-run"
+if [ "$(id -u)" != 0 ]; then
+  chmod 000 "$I/.env"
+  run ./update.sh --check && { chmod 600 "$I/.env"; fail "--check passed with an unreadable .env"; }
+  chmod 600 "$I/.env"
+  grep -q 'cannot read .env as .*sudo ./update.sh --check' "$F/run.log" || fail "unreadable .env not explained"
+  chmod 000 "$I/.env"
+  run ./backup.sh && { chmod 600 "$I/.env"; fail "backup.sh passed with an unreadable .env"; }
+  chmod 600 "$I/.env"
+  grep -q 'cannot read .env as .*sudo ./update.sh --check' "$F/run.log" || fail "backup.sh did not explain the unreadable .env"
+fi
+ok "HTTP 404 named; unreadable .env names the sudo fix"
+
+step "a run as root hands files back to the folder owner, except tls, links and other devices"
+G="$F/giveback"
+mkdir -p "$G/backups" "$G/state" "$G/tls" "$G/rollback/tls" "$G/sub dir"
+touch "$G/.env" "$G/update.sh" "$G/backups/a.gz" "$G/tls/key.pem" "$G/rollback/tls/key.pem" "$G/sub dir/x y" "$G/state/update.log"
+ln -s /etc/hostname "$G/link"
+ln "$G/backups/a.gz" "$G/backups/b.gz"
+(
+  cd "$I" && . ./lib.sh
+  # Pretend to be root and that the folder belongs to uid 4242, so every file here is "not the owner's".
+  id() { if [ "${1:-}" = -u ]; then echo 0; else command id "$@"; fi; }
+  stat() { if [ "${1:-}" = -c ] && [ "${2:-}" = '%u:%g' ]; then echo 4242:4242; else command stat "$@"; fi; }
+  chown() { printf '%s %s\n' "$2" "${*: -1}" >>"$F/chowned"; }
+  give_back_files "$G"
+)
+for want in .env update.sh backups state state/update.log rollback "sub dir" "sub dir/x y"; do
+  grep -qxF "4242:4242 $G/$want" "$F/chowned" || fail "not handed back: $want"
+done
+for skip in tls tls/key.pem rollback/tls rollback/tls/key.pem link backups/a.gz backups/b.gz; do
+  grep -qF " $G/$skip" "$F/chowned" && fail "handed back: $skip"
+done
+(cd "$I" && . ./lib.sh && chown() { printf 'called\n' >>"$F/chowned-user"; } && give_back_files "$G")
+[ -e "$F/chowned-user" ] && fail "a non-root run changed owners"
+ok "root run: owner gets .env, scripts, backups, state, rollback; tls, links and hard links kept"
+
 step "a major version is refused"
 if run ./update.sh --version 2.0.0 --yes; then fail "major update accepted"; else [ $? = 3 ] || fail "exit code"; fi
 grep -q 'new major version' "$F/run.log" || fail "major refusal message"

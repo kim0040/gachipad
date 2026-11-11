@@ -26,7 +26,7 @@ trap '' PIPE
 umask 077
 cd "$(dirname "$0")"
 . ./lib.sh
-declare -F assert_no_database_migration >/dev/null || die 'lib.sh is older than this script'
+declare -F assert_readable_env >/dev/null || die 'lib.sh is older than this script'
 
 STATE=state
 LOG="$STATE/update.log"
@@ -106,13 +106,19 @@ version_gt() {
 
 # --- downloads -----------------------------------------------------------------------------------
 
-# fetch url file [seconds]: GET without credentials or cookies
+# fetch url file [seconds]: GET without credentials or cookies; FETCH_STATUS is the HTTP status
 fetch() {
+  FETCH_STATUS=""
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --proto '=https,http' --max-time "${3:-30}" -A "gachipad-update/$CURRENT" \
-      -H 'Accept: application/vnd.github+json' -o "$2" "$1"
+    FETCH_STATUS="$(curl -fsSL --proto '=https,http' --max-time "${3:-30}" -A "gachipad-update/$CURRENT" \
+      -H 'Accept: application/vnd.github+json' -o "$2" -w '%{http_code}' "$1")"
   else
-    wget -q -T "${3:-30}" -U "gachipad-update/$CURRENT" -O "$2" "$1"
+    # -S prints the response headers to stderr; the last status line is the final response.
+    local status=0
+    wget -q -S -T "${3:-30}" -U "gachipad-update/$CURRENT" -O "$2" "$1" 2>"$2.headers" || status=$?
+    FETCH_STATUS="$(awk '$1 ~ /^HTTP\// { code = $2 } END { print code }' "$2.headers" 2>/dev/null)"
+    rm -f "$2.headers"
+    return "$status"
   fi
 }
 
@@ -164,7 +170,12 @@ else:
 releases() {
   local file="$WORK/releases.json"
   fetch "$API/repos/$REPO/releases?per_page=50" "$file" || {
-    say "cannot fetch release list from $API; check connectivity or use --bundle" >&2; return 1;
+    case "${FETCH_STATUS:-}" in
+      403 | 429) say "GitHub refused the release list (HTTP $FETCH_STATUS), usually because this public IP used up its 60 requests an hour without a login; try again in an hour (the timer retries tomorrow)" >&2 ;;
+      [1-9][0-9][0-9]) say "cannot fetch release list from $API (HTTP $FETCH_STATUS); check UPDATE_REPO or use --bundle" >&2 ;;
+      *) say "cannot fetch release list from $API; check connectivity or use --bundle" >&2 ;;
+    esac
+    return 1;
   }
   parse_json releases '
     const fs = require("node:fs");
@@ -501,7 +512,7 @@ update() {
   if [ -n "$BUNDLE" ]; then
     verify_archive "$BUNDLE"
     mkdir "$WORK/x"
-    tar xzf "$BUNDLE" -C "$WORK/x"
+    tar --no-same-owner -xzf "$BUNDLE" -C "$WORK/x"
     src="$(find "$WORK/x" -maxdepth 2 -name images.tar -exec dirname {} \; | head -n 1)"
     [ -n "$src" ] || fail failed "not an offline gachipad bundle"
     (verify_bundle "$src") || fail failed "bundle content checksum mismatch"
@@ -567,7 +578,7 @@ update() {
     fetch "$base/$asset" "$WORK/$asset" 600 || fail failed "cannot download $asset"
     [ "$(sha256_file "$WORK/$asset")" = "$expected" ] || fail failed "checksum mismatch: $asset is not the released file"
     mkdir "$WORK/x"
-    tar xzf "$WORK/$asset" -C "$WORK/x"
+    tar --no-same-owner -xzf "$WORK/$asset" -C "$WORK/x"
     src="$(find "$WORK/x" -maxdepth 2 -name docker-compose.yml -exec dirname {} \; | head -n 1)"
     [ -n "$src" ] || fail failed "$asset is not a gachipad release"
     (verify_bundle "$src") || fail failed "content checksum mismatch in $asset"
@@ -676,6 +687,7 @@ main() {
     die '--mdns-tools takes only its bundle; it cannot be combined with --dry-run, --version, --allow-major or another mode'
   fi
   MODE="$mode"
+  assert_readable_env
   case "$mode:$DRY" in
     check:* | disable-auto:* | enable-auto:1) ;;
     *) assert_no_database_migration ;;
@@ -692,6 +704,8 @@ main() {
     for n in 2 1; do [ -f "$LOG.$n" ] && mv "$LOG.$n" "$LOG.$((n + 1))"; done
     mv "$LOG" "$LOG.1"
   fi
+  # Create the log before tee opens it in the background, so a run as root hands it back too.
+  [ "$DRY" = 1 ] || : >>"$LOG"
   [ "$DRY" = 1 ] || exec > >(trap '' HUP INT TERM PIPE; exec tee -i -p -a "$LOG") 2>&1
 
   if [ "$mode" = mdns-tools ]; then

@@ -6,7 +6,8 @@ set -euo pipefail
 umask 077
 cd "$(dirname "$0")"
 . ./lib.sh
-declare -F assert_no_database_migration >/dev/null || die 'lib.sh is older than this script'
+declare -F assert_readable_env >/dev/null || die 'lib.sh is older than this script'
+assert_readable_env
 assert_no_database_migration
 need_docker
 install_lock
