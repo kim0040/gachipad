@@ -142,8 +142,15 @@ jobs:
         shell: pwsh
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force
-          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          # The PowerShell Gallery fails a download now and then (11 Nov); try three times.
+          function Install-WithRetry([hashtable] $Module) {
+            for ($i = 1; $i -le 3; $i++) {
+              try { Install-Module @Module -Scope CurrentUser -Force -ErrorAction Stop; return }
+              catch { if ($i -eq 3) { throw }; Write-Warning $_; Start-Sleep -Seconds (15 * $i) }
+            }
+          }
+          Install-WithRetry @{ Name = 'Pester'; RequiredVersion = '5.7.1' }
+          Install-WithRetry @{ Name = 'PSScriptAnalyzer' }
       - name: Pester
         shell: pwsh
         run: Invoke-Pester -Path ./deploy/windows-tests -Output Detailed -CI
@@ -152,7 +159,12 @@ jobs:
         shell: powershell
         run: |
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          for ($i = 1; $i -le 3; $i++) {
+            try {
+              Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
+              break
+            } catch { if ($i -eq 3) { throw }; Write-Warning $_; Start-Sleep -Seconds (15 * $i) }
+          }
           Import-Module Pester -RequiredVersion 5.7.1
           Invoke-Pester -Path ./deploy/windows-tests -Output Detailed -CI
       - name: PSScriptAnalyzer
