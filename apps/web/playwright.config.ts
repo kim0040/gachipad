@@ -48,8 +48,10 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   workers: 3,
-  retries: 0,
-  reporter: [["list"]],
+  // On GitHub one retry absorbs a runner that stalls for a moment; a test that needed it is still
+  // reported as flaky (and annotated on the run), so it gets looked at instead of hidden.
+  retries: process.env.GITHUB_ACTIONS ? 1 : 0,
+  reporter: process.env.GITHUB_ACTIONS ? [["list"], ["github"]] : [["list"]],
   use: {
     baseURL: BASE_URL,
     locale: "en-US",

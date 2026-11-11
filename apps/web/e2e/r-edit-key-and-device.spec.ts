@@ -1,4 +1,4 @@
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type APIResponse, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import {
   closeAll,
   closeDialog,
@@ -640,8 +640,15 @@ test("a PIN asked for anew while editing ends the session and deletes the copy",
 async function signedInAs(user: User, name: string | null): Promise<void> {
   await user.context.route("**/api/session", async (route) => {
     if (route.request().method() !== "GET") return route.fallback();
-    const response = await route.fetch();
-    const body = await response.json();
+    let response: APIResponse;
+    let body: Record<string, unknown>;
+    try {
+      response = await route.fetch();
+      body = await response.json();
+    } catch {
+      // The page that asked was closed while its request was in flight: nothing is waiting.
+      return route.continue().catch(() => undefined);
+    }
     return route.fulfill({
       response,
       json: name ? { ...body, identity: { provider: "oidc", name } } : body,
