@@ -21,7 +21,7 @@ services:
       start_period: 10s
 
   valkey:
-    image: valkey/valkey:8
+    image: valkey/valkey:9
     logging: *logging
     ports:
       - "127.0.0.1:${VALKEY_DEV_PORT:-6379}:6379"

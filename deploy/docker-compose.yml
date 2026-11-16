@@ -238,7 +238,7 @@ services:
   valkey:
     <<: *hardening
     cap_drop: []
-    image: valkey/valkey:8.1.10
+    image: valkey/valkey:9.1.3
     # The password reaches valkey-server through a private config file: the arguments of the
     # container's init process are visible to every user of the host in `ps`.
     entrypoint:
